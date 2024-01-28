@@ -356,7 +356,7 @@ namespace Invalid.ADVMESAI.Data.Scripts.MESAPISpawning
         // Inside the OnMessageEntered method
         private void OnMessageEntered(string messageText, ref bool sendToOthers)
         {
-            if (messageText.StartsWith("/SCStartGauntlet", StringComparison.OrdinalIgnoreCase))
+            if (messageText.StartsWith("/StartAdvancedWaveSpawn", StringComparison.OrdinalIgnoreCase))
             {
                 // Prevent the message from being broadcasted to other players
                 sendToOthers = false;
@@ -392,7 +392,7 @@ namespace Invalid.ADVMESAI.Data.Scripts.MESAPISpawning
             }
             else
             {
-                MyVisualScriptLogicProvider.SendChatMessage("Invalid command format. Use /SCStartGauntlet X to specify additional ships per wave (max 10). (Server)", "Wave Spawner", 0, MyFontEnum.White);
+                MyVisualScriptLogicProvider.SendChatMessage("Invalid command format. Use /StartAdvancedWaveSpawn X to specify additional ships per wave (max 10). (Server)", "Wave Spawner", 0, MyFontEnum.White);
             }
         }
 

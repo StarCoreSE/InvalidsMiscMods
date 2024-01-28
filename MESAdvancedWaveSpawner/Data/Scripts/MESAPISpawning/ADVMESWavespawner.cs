@@ -18,9 +18,9 @@ using System.Xml;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using System.Linq;
 using System.IO;
-using static StarCoreMESAI.Data.Scripts.MESAPISpawning.SCMESWave_Packets;
+using static ADVMESAI.Data.Scripts.MESAPISpawning.ADVMESWave_Packets;
 
-namespace Invalid.StarCoreMESAI.Data.Scripts.MESAPISpawning
+namespace Invalid.ADVMESAI.Data.Scripts.MESAPISpawning
 {
     [MySessionComponentDescriptor(MyUpdateOrder.AfterSimulation)]
     public class SCMESWaveSpawnerComponent : MySessionComponentBase
@@ -345,7 +345,7 @@ namespace Invalid.StarCoreMESAI.Data.Scripts.MESAPISpawning
         // Inside the OnMessageEntered method
         private void OnMessageEntered(string messageText, ref bool sendToOthers)
         {
-            if (messageText.StartsWith("/SCStartGauntlet", StringComparison.OrdinalIgnoreCase))
+            if (messageText.StartsWith("/StartAdvWaveSpawner", StringComparison.OrdinalIgnoreCase))
             {
                 // Prevent the message from being broadcasted to other players
                 sendToOthers = false;
@@ -381,7 +381,7 @@ namespace Invalid.StarCoreMESAI.Data.Scripts.MESAPISpawning
             }
             else
             {
-                MyAPIGateway.Utilities.SendMessage("Invalid command format. Use /SCStartGauntlet X to specify additional ships per wave (max 10). (Server)");
+                MyAPIGateway.Utilities.SendMessage("Invalid command format. Use /StartAdvWaveSpawner X to specify additional ships per wave (max 10). (Server)");
             }
         }
 

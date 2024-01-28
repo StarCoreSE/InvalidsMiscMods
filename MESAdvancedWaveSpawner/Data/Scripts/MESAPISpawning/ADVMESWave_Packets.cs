@@ -3,9 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace StarCoreMESAI.Data.Scripts.MESAPISpawning
+namespace ADVMESAI.Data.Scripts.MESAPISpawning
 {
-    public class SCMESWave_Packets
+    public class ADVMESWave_Packets
     {
 
         [ProtoInclude(1000, typeof(ChatCommandPacket))]

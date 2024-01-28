@@ -1,0 +1,3 @@
+﻿Open Setup.cs and follow its indications.
+
+To update, you only need to update the other files without Setup.cs.

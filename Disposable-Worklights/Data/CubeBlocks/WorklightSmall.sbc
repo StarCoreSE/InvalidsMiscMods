@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+	<CubeBlocks>
+    <Definition>
+      <Id>
+        <TypeId>CubeBlock</TypeId>
+        <SubtypeId>WorklightSmall</SubtypeId>
+      </Id>
+      <DisplayName>Small Worklight</DisplayName>
+      <Description>Temporary work light. Deletes itself after 1 hour.</Description>
+      <Icon>Textures\Icons\worklightsmall.png</Icon>
+      <CubeSize>Small</CubeSize>
+      <BlockTopology>TriangleMesh</BlockTopology>
+      <Size x="1" y="1" z="1"/>
+      <ModelOffset x="0" y="0" z="0"/>
+      <Model>Models\WorklightSmall.mwm</Model>
+      <Components>
+        <Component Subtype="Construction" Count="1"/>
+      </Components>
+      <CriticalComponent Subtype="SteelPlate" Index="0"/>
+      <MountPoints>
+        <MountPoint Side="Bottom" StartX="0" StartY="0" EndX="1" EndY="1" Enabled="false"/>
+      </MountPoints>
+      <BlockPairName>WorklightSmall</BlockPairName>
+      <HasPhysics>false</HasPhysics>
+      <IsStandAlone>true</IsStandAlone>
+    </Definition>
+	</CubeBlocks>
+</Definitions>

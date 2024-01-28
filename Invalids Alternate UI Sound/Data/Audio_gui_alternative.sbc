@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<Definitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Sounds>
+        <Sound>
+            <Id>
+                <TypeId>MyObjectBuilder_AudioDefinition</TypeId>
+                <SubtypeId>HudMouseClick</SubtypeId>
+            </Id>
+            <Category>HUD</Category>
+            <Volume>0.05</Volume>
+            <PitchVariation>25</PitchVariation>
+            <CanBeSilencedByVoid>false</CanBeSilencedByVoid>
+            <Waves>
+                <Wave Type="D2">
+                    <Start>Audio\buttonclick.wav</Start>
+                </Wave>
+            </Waves>
+        </Sound>
+        <Sound>
+            <Id>
+                <TypeId>MyObjectBuilder_AudioDefinition</TypeId>
+                <SubtypeId>HudMouseOver</SubtypeId>
+            </Id>
+            <Category>HUD</Category>
+            <Volume>0.02</Volume>
+            <PitchVariation>25</PitchVariation>
+            <CanBeSilencedByVoid>false</CanBeSilencedByVoid>
+            <Waves>
+                <Wave Type="D2">
+                    <Start>Audio\buttonrollover.wav</Start>
+                </Wave>
+            </Waves>
+        </Sound>
+		        <Sound>
+            <Id>
+                <TypeId>MyObjectBuilder_AudioDefinition</TypeId>
+                <SubtypeId>HudClick</SubtypeId>
+            </Id>
+            <Category>HUD</Category>
+            <MaxDistance>2000</MaxDistance>
+            <Volume>0.07</Volume>
+            <PitchVariation>30</PitchVariation>
+            <CanBeSilencedByVoid>false</CanBeSilencedByVoid>
+            <Waves>
+                <Wave Type="D2">
+                    <Start>Audio\buttonclickrelease.wav</Start>
+                </Wave>
+            </Waves>
+        </Sound>
+	</Sounds>
+</Definitions>

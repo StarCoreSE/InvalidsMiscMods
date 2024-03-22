@@ -2,6 +2,8 @@ name: "Upload Disposable-Worklights"
 
 on:
   push:
+    branches:
+      - main  
     paths:
       - "Disposable-Worklights/**"
 

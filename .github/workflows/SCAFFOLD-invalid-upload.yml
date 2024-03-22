@@ -2,6 +2,8 @@ name: "Upload SCAFFOLD-invalid-test"
 
 on:
   push:
+    branches:
+      - main  
     paths:
       - "SCAFFOLD-invalid-test/**"
 

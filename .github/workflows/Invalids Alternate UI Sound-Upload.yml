@@ -2,6 +2,8 @@ name: "Upload Invalids Alternate UI Sound"
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "Invalids Alternate UI Sound/**"
 

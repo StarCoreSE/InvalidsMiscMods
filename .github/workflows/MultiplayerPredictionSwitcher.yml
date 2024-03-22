@@ -2,6 +2,8 @@ name: "Upload MultiplayerPredictionSwitcher"
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "MultiplayerPredictionSwitcher/**"
 

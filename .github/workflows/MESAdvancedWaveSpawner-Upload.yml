@@ -2,6 +2,8 @@ name: "Upload MESAdvancedWaveSpawner"
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "MESAdvancedWaveSpawner/**"
 

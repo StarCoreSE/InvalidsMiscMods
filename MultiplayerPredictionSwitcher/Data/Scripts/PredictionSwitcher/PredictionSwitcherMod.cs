@@ -15,13 +15,11 @@ using VRageMath;
 public class SessionComp : MySessionComponentBase
 {
     private bool isPredictionDisabled = true;
-    private bool shouldDrawServerLine = false;  // New field
-    private MyEntity lastControlledEntity = null;
+    private bool shouldDrawServerLine = false;
     private DateTime lastDrawn = DateTime.MinValue;
     private int timer = 0;
     private DateTime lastLineDrawn = DateTime.Now;
     private TimeSpan drawInterval = TimeSpan.FromMilliseconds(30);
-
 
     struct LineToDraw
     {
@@ -30,13 +28,12 @@ public class SessionComp : MySessionComponentBase
         public DateTime Timestamp;
         public Color Color;
 
-
         public LineToDraw(Vector3D origin, Vector3D direction, DateTime timestamp, Color color)
         {
-            this.Origin = origin;
-            this.Direction = direction;
-            this.Timestamp = timestamp;
-            this.Color = color;
+            Origin = origin;
+            Direction = direction;
+            Timestamp = timestamp;
+            Color = color;
         }
     }
 
@@ -50,37 +47,25 @@ public class SessionComp : MySessionComponentBase
         }
     }
 
-        public override void UpdateAfterSimulation()
+    public override void UpdateAfterSimulation()
+    {
+        if (!MyAPIGateway.Utilities.IsDedicated)
         {
-            if (!MyAPIGateway.Utilities.IsDedicated)
+            // New code: Disable prediction for all grids in the world
+            var allEntities = new HashSet<IMyEntity>();
+            MyAPIGateway.Entities.GetEntities(allEntities, entity => entity is MyCubeGrid);
+
+            foreach (var entity in allEntities)
             {
-                // Existing code for controlled entities and predictions
-                MyEntity controlledEntity = GetControlledGrid();
-                MyEntity cockpitEntity = GetControlledCockpit(controlledEntity);
+                var grid = entity as MyCubeGrid;
+                if (grid != null)
+                {
+                    grid.ForceDisablePrediction = isPredictionDisabled;
 
-                if (controlledEntity != null && !controlledEntity.Equals(lastControlledEntity))
-                {
-                    lastControlledEntity = controlledEntity;
-                    MyCubeGrid controlled = controlledEntity as MyCubeGrid;
-
-                    if (controlled != null)
-                    {
-                        controlled.ForceDisablePrediction = isPredictionDisabled;
-                        MyAPIGateway.Utilities.ShowNotification($"You are controlling: {controlledEntity.DisplayName}, ForceDisablePrediction: {isPredictionDisabled}", 2000, MyFontEnum.Red);
-                    }
+                    // Debug notification for each grid
+                    //MyAPIGateway.Utilities.ShowNotification($"Prediction Disabled for: {grid.DisplayName}", 1000/60, MyFontEnum.Blue);
                 }
-                else if (controlledEntity == null)
-                {
-                    lastControlledEntity = null;
-                }
-                else if (controlledEntity.Equals(lastControlledEntity))
-                {
-                    MyCubeGrid controlled = controlledEntity as MyCubeGrid;
-                    if (controlled != null)
-                    {
-                        controlled.ForceDisablePrediction = isPredictionDisabled;
-                    }
-                }
+            }
 
             // Timer-based line drawing
             timer += 1; // Increment counter since UpdateAfterSimulation is called every millisecond
@@ -89,19 +74,23 @@ public class SessionComp : MySessionComponentBase
             {
                 timer = 0; // Reset counter
 
-                if (shouldDrawServerLine && cockpitEntity != null)
+                MyEntity controlledEntity = GetControlledGrid();
+                if (controlledEntity != null && shouldDrawServerLine)
                 {
-                    // Calculate the center of the grid
-                    Vector3D gridCenter = (controlledEntity as MyCubeGrid)?.PositionComp.WorldAABB.Center ?? Vector3D.Zero;
+                    var grid = controlledEntity as MyCubeGrid;
+                    if (grid != null)
+                    {
+                        // Calculate the center of the grid
+                        Vector3D gridCenter = grid.PositionComp.WorldAABB.Center;
 
-                    // Use cockpit's forward direction
-                    Vector3D direction = cockpitEntity.WorldMatrix.Forward;
+                        // Use controlledEntity's forward direction
+                        Vector3D direction = controlledEntity.WorldMatrix.Forward;
 
-                    // Add the line to draw
-                    linesToDraw.Add(new LineToDraw(gridCenter, direction, DateTime.Now, Color.Red));
+                        // Add the line to draw
+                        linesToDraw.Add(new LineToDraw(gridCenter, direction, DateTime.Now, Color.Red));
+                    }
                 }
             }
-
 
             // Call DrawLines every update
             DrawLines();
@@ -118,45 +107,14 @@ public class SessionComp : MySessionComponentBase
             }
 
             var controlledEntity = MyAPIGateway.Session.Player.Controller?.ControlledEntity?.Entity;
-            if (controlledEntity == null)
-            {
-                return null;
-            }
-
-            if (controlledEntity is IMyCockpit || controlledEntity is IMyRemoteControl)
-            {
-                return (controlledEntity as IMyCubeBlock).CubeGrid as MyEntity;
-            }
+            return (MyEntity)controlledEntity;
         }
         catch (Exception e)
         {
             MyLog.Default.WriteLine($"Error in GetControlledGrid: {e}");
-        }
-
-        return null;
-    }
-
-    private MyEntity GetControlledCockpit(MyEntity controlledGrid)
-    {
-        if (controlledGrid == null)
             return null;
-
-        var grid = controlledGrid as MyCubeGrid;
-        if (grid == null)
-            return null;
-
-        foreach (var block in grid.GetFatBlocks())
-        {
-            var cockpit = block as MyCockpit; // Convert the block to MyCockpit
-            if (cockpit != null)
-            {
-                if (cockpit.WorldMatrix != null)  // Add null check here
-                    return cockpit;
-            }
         }
-        return null;
     }
-
 
     private void OnMessageEntered(string messageText, ref bool sendToOthers)
     {
@@ -168,11 +126,10 @@ public class SessionComp : MySessionComponentBase
         }
         else if (messageText.Equals("/toggleserverline"))
         {
-            shouldDrawServerLine = !shouldDrawServerLine;  // Toggle flag
+            shouldDrawServerLine = !shouldDrawServerLine;
             sendToOthers = false;
         }
     }
-
 
     private void DrawLines()
     {
@@ -181,13 +138,10 @@ public class SessionComp : MySessionComponentBase
 
         DateTime now = DateTime.Now;
 
-        // Remove lines older than 2 seconds
         linesToDraw.RemoveAll(line => (now - line.Timestamp).TotalSeconds >= 2);
 
-        // Draw lines
         foreach (var line in linesToDraw)
         {
-            // Draw the line if it should be visible
             if ((now - line.Timestamp).TotalSeconds < 2)
             {
                 Vector4 colorVector = new Vector4(line.Color.R / 255.0f, line.Color.G / 255.0f, line.Color.B / 255.0f, line.Color.A / 255.0f);
@@ -196,8 +150,6 @@ public class SessionComp : MySessionComponentBase
             }
         }
     }
-
-
 
     protected override void UnloadData()
     {

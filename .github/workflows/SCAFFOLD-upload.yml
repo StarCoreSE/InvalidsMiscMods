@@ -1,11 +1,11 @@
-name: "Upload SCAFFOLD-invalid-test"
+name: "Upload SCAFFOLD"
 
 on:
   push:
     branches:
       - main  
     paths:
-      - "SCAFFOLD-invalid-test/**"
+      - "SCAFFOLD/**"
 
 jobs:
   upload:
@@ -16,7 +16,7 @@ jobs:
         with:
           appID: 244850
           publishedFileID: 3013053286
-          path: "SCAFFOLD-invalid-test"
+          path: "SCAFFOLD"
           changelog: ${{ github.event.head_commit.message }}  
         env:
           STEAM_ACCOUNT_NAME: ${{ secrets.accountname }}

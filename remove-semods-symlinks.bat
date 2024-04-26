@@ -10,12 +10,28 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 set "targetDir=%APPDATA%\SpaceEngineers\Mods"
+set "desktopDir=%USERPROFILE%\Desktop\SpaceEngineersModsBackup"
 
+:: Creating desktop directory if it doesn't exist
+if not exist "%desktopDir%" (
+    mkdir "%desktopDir%"
+)
+
+:: Copying non-symbolic link folders to the desktop
 for /d %%i in ("%targetDir%\*") do (
-    if exist "%%i\metadata.mod" (
-        set "symlinkPath=%%i"
+    set "folderName=%%~nxi"
+    fsutil reparsepoint query "%%i" > nul 2>&1
+    if errorlevel 1 (
+        robocopy "%%i" "%desktopDir%\!folderName!" /E /NFL /NDL /NJH /NJS /nc /ns /np
+    )
+)
 
-        rmdir /s /q "!symlinkPath!"
+:: Removing symbolic links from the mod folder
+for /d %%i in ("%targetDir%\*") do (
+    set "folderName=%%~nxi"
+    fsutil reparsepoint query "%%i" > nul 2>&1
+    if not errorlevel 1 (
+        rmdir /s /q "%%i"
         echo Removed symlink in "%%i"
     )
 )

@@ -59,7 +59,7 @@
 			</InventorySize>
 			<RequiredPowerInput>0.05</RequiredPowerInput>
 		</Definition>		
-		<Definition xsi:type="MyObjectBuilder_PoweredCargoContainerDefinition">
+	<!--	<Definition xsi:type="MyObjectBuilder_PoweredCargoContainerDefinition">
 			<Id>
 				<TypeId>Collector</TypeId>
 				<SubtypeId>ShipyardCorner_Small</SubtypeId>
@@ -111,7 +111,7 @@
         <Z>1</Z>
       </InventorySize>
 			<RequiredPowerInput>0.05</RequiredPowerInput>
-		</Definition>
+		</Definition> -->
 		<!--
     <Definition xsi:type="MyObjectBuilder_PoweredCargoContainerDefinition">
       <Id>

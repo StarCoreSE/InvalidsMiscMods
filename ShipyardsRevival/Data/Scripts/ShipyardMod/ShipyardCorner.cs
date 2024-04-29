@@ -13,6 +13,7 @@ using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
+using VRageMath;
 using VRage.ObjectBuilders;
 using VRage.Utils;
 
@@ -55,6 +56,33 @@ namespace ShipyardMod
         public override void Close()
         {
             NeedsUpdate = MyEntityUpdateEnum.NONE;
+        }
+
+        public override void UpdateAfterSimulation()
+        {
+            
+            var pos = _block.GetPosition();
+            var offset = 2.5f;
+            
+            var mat = _block.WorldMatrix;
+            float width = 0.125f;
+            float length = 256.0f + offset;
+
+            pos += -mat.Forward * offset;
+            pos += -mat.Left * offset;
+            pos += -mat.Up * offset;
+
+            var forward = pos + mat.Forward * length;
+            var left = pos + mat.Left * length;
+            var up = pos + mat.Up * length;
+            var r = (VRageMath.Vector4)Color.Red;
+            var g = (VRageMath.Vector4)Color.Green;
+            var b = (VRageMath.Vector4)Color.Blue;
+            var material = MyStringId.GetOrCompute("Square");
+            var blend = VRageRender.MyBillboard.BlendTypeEnum.PostPP;
+            MySimpleObjectDraw.DrawLine(pos, left, material, ref r, width, blend);
+            MySimpleObjectDraw.DrawLine(pos, up, material, ref g, width, blend);
+            MySimpleObjectDraw.DrawLine(pos, forward, material, ref b, width, blend);
         }
 
         public override void UpdateOnceBeforeFrame()

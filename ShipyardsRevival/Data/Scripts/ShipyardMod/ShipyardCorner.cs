@@ -68,96 +68,66 @@ namespace ShipyardMod
                 return;
             }
 
-
             var pos = _block.GetPosition();
             var offset = 2.5f;
-
             var mat = _block.WorldMatrix;
             float width = 0.125f;
             float length = 200.0f + offset;
-
             pos += -mat.Forward * offset;
             pos += -mat.Left * offset;
             pos += -mat.Up * offset;
 
-            int LEFT = 6;
-            int FORWARD = 4;
-            int UP = 5;
+            Vector3D[] directions = new Vector3D[] {
+        mat.Forward,
+        mat.Left,
+        mat.Up,
+       //-mat.Forward, // Backward
+       //-mat.Left,    // Right
+       //-mat.Up       // Down
+    };
 
-            var dummies = new Dictionary<string, IMyModelDummy>();
-            _block.Model.GetDummies(dummies);
-            
-
-            var forward = pos + mat.Forward * length;
-            var left = pos + mat.Left * length;
-            var up = pos + mat.Up * length;
             var r = (VRageMath.Vector4)Color.Red;
-            var g = (VRageMath.Vector4)Color.Green;
-            var b = (VRageMath.Vector4)Color.Blue;
             var material = MyStringId.GetOrCompute("Square");
             var blend = VRageRender.MyBillboard.BlendTypeEnum.PostPP;
 
-
-            var hits = new List<Vector3I>();
-
-            var grid = _block.CubeGrid;
-            grid.RayCastCells(pos, left, hits);
-            Logging.Instance.WriteLine($"CastRay: hits: {hits.Count}");
-            bool matchingCorner = false;
-            string mysubtype = _block.BlockDefinition.SubtypeId.ToString();
-            foreach (var hit in hits)
+            foreach (var direction in directions)
             {
-                var block = grid.GetCubeBlock(hit);
-                if (block != null)
+                var endPoint = pos + direction * length;
+                var hits = new List<Vector3I>();
+                _block.CubeGrid.RayCastCells(pos, endPoint, hits);
+                bool matchingCorner = false;
+                string mysubtype = _block.BlockDefinition.SubtypeId.ToString();
+
+                foreach (var hit in hits)
                 {
-                    Logging.Instance.WriteLine($"block: {block.BlockDefinition.Id.SubtypeId}");
-                    var subtypeOther = block.BlockDefinition.Id.SubtypeId.ToString();
-                    if (subtypeOther == mysubtype)
+                    var block = _block.CubeGrid.GetCubeBlock(hit);
+                    if (block != null)
                     {
-                        // if he is me, continue
-                        if (block.SlimId() == _block.SlimBlock.SlimId())
+                        var subtypeOther = block.BlockDefinition.Id.SubtypeId.ToString();
+                        if (subtypeOther == mysubtype)
                         {
-                            continue;
+                            if (block.SlimId() != _block.SlimBlock.SlimId())
+                            {
+                                matchingCorner = true;
+                                break;
+                            }
                         }
-                         else
+                        else if (subtypeOther != "ShipyardConveyor_Large" && subtypeOther != "ShipyardConveyorMount_Large")
                         {
-                            // it's a matching corner block, and the path is clear
-                            matchingCorner = true;
-                            break;
+                            break; // Stop at first non-conveyor, non-matching block
                         }
-                    }
-                    else if (subtypeOther == "ShipyardConveyor_Large" || subtypeOther == "ShipyardConveyorMount_Large")
-                    {
-                        // conveyors are allowed to be between corners
-                        continue;
-                    }
-                    else
-                    {
-                        // encountered a block that isn't a corner or conveyor so matchingCorner remains false and we bail out
-                        break;
                     }
                 }
-            }
-            
-            if (!matchingCorner)
-            {
-                MySimpleObjectDraw.DrawLine(pos, left, material, ref r, width, blend);
-            }
-            hits.Clear();
 
-//            MyAPIGateway.Physics.CastRay(pos, up, hits);
-//            if (hits.FindAll(h => h.HitEntity as IMySlimBlock != null).Count == threshold)
-//            {
-//                MySimpleObjectDraw.DrawLine(pos, up, material, ref g, width, blend);
-//            }
-//            hits.Clear();
-//            
-//            MyAPIGateway.Physics.CastRay(pos, forward, hits);
-//            if (hits.FindAll(h => h.HitEntity as IMySlimBlock != null).Count == threshold)
-//            {
-//                MySimpleObjectDraw.DrawLine(pos, forward, material, ref b, width, blend);
-//            }
+                if (!matchingCorner)
+                {
+                    MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref r, width, blend);
+                }
+
+                hits.Clear();
+            }
         }
+
 
         public override void UpdateOnceBeforeFrame()
         {

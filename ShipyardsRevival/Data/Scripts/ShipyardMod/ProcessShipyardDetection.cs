@@ -307,8 +307,6 @@ namespace ShipyardMod.ProcessHandlers
                 foreach (IMyCubeBlock tool in tools)
                 {
                     Vector3D point = tool.PositionComp.GetPosition();
-                    //the grid position is not consistent with rotation, but world position is always the center of the block
-                    //get the Vector3I of the center of the block and calculate APO on that
                     Vector3I adjustedPoint = ((IMyCubeGrid)entity).WorldToGridInteger(point);
                     gridPoints.Add(adjustedPoint);
                 }
@@ -319,6 +317,23 @@ namespace ShipyardMod.ProcessHandlers
                     foreach (var tool in tools)
                         Communication.SendCustomInfo(tool.EntityId, "Invalid Shipyard: Corners not aligned!");
                     return false;
+                }
+
+                // Check if any two corner points are more than 1km apart
+                const double maxDistanceSquared = 1000 * 1000; // 1km squared
+                for (int i = 0; i < tools.Count - 1; i++)
+                {
+                    for (int j = i + 1; j < tools.Count; j++)
+                    {
+                        double distanceSquared = Vector3D.DistanceSquared(tools[i].GetPosition(), tools[j].GetPosition());
+                        if (distanceSquared > maxDistanceSquared)
+                        {
+                            Logging.Instance.WriteDebug($"Yard {entity.EntityId} failed: Corner distance exceeds 1km");
+                            foreach (var tool in tools)
+                                Communication.SendCustomInfo(tool.EntityId, "Invalid Shipyard: Corner distance exceeds 1km!");
+                            return false;
+                        }
+                    }
                 }
 
                 if (!AreToolsConnected(tools))

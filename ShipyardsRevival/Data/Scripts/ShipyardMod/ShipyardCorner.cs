@@ -72,7 +72,6 @@ namespace ShipyardMod
             var offset = 2.5f;
             var mat = _block.WorldMatrix;
             float width = 0.125f;
-            float length = 200.0f + offset;
             pos += -mat.Forward * offset;
             pos += -mat.Left * offset;
             pos += -mat.Up * offset;
@@ -94,7 +93,7 @@ namespace ShipyardMod
             var blend = VRageRender.MyBillboard.BlendTypeEnum.PostPP;
 
             string subtypeShipyardCorner = _block.BlockDefinition.SubtypeId.ToString();
-            float maxLength = 100.0f;
+            float maxLength = 1000.0f; // let me guess, you need more?
             var cells = new List<Vector3I>();
             foreach (var direction in directions)
             {

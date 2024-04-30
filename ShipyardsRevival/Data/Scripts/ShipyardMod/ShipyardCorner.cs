@@ -16,6 +16,9 @@ using VRage.ModAPI;
 using VRageMath;
 using VRage.ObjectBuilders;
 using VRage.Utils;
+using VRageRender.Import;
+using Sandbox.Engine.Physics;
+using System.Text.RegularExpressions;
 
 namespace ShipyardMod
 {
@@ -60,17 +63,30 @@ namespace ShipyardMod
 
         public override void UpdateAfterSimulation()
         {
-            
+            if (_block?.CubeGrid?.Physics == null)
+            {
+                return;
+            }
+
+
             var pos = _block.GetPosition();
             var offset = 2.5f;
-            
+
             var mat = _block.WorldMatrix;
             float width = 0.125f;
-            float length = 256.0f + offset;
+            float length = 200.0f + offset;
 
             pos += -mat.Forward * offset;
             pos += -mat.Left * offset;
             pos += -mat.Up * offset;
+
+            int LEFT = 6;
+            int FORWARD = 4;
+            int UP = 5;
+
+            var dummies = new Dictionary<string, IMyModelDummy>();
+            _block.Model.GetDummies(dummies);
+            
 
             var forward = pos + mat.Forward * length;
             var left = pos + mat.Left * length;
@@ -80,9 +96,67 @@ namespace ShipyardMod
             var b = (VRageMath.Vector4)Color.Blue;
             var material = MyStringId.GetOrCompute("Square");
             var blend = VRageRender.MyBillboard.BlendTypeEnum.PostPP;
-            MySimpleObjectDraw.DrawLine(pos, left, material, ref r, width, blend);
-            MySimpleObjectDraw.DrawLine(pos, up, material, ref g, width, blend);
-            MySimpleObjectDraw.DrawLine(pos, forward, material, ref b, width, blend);
+
+
+            var hits = new List<Vector3I>();
+
+            var grid = _block.CubeGrid;
+            grid.RayCastCells(pos, left, hits);
+            Logging.Instance.WriteLine($"CastRay: hits: {hits.Count}");
+            bool matchingCorner = false;
+            string mysubtype = _block.BlockDefinition.SubtypeId.ToString();
+            foreach (var hit in hits)
+            {
+                var block = grid.GetCubeBlock(hit);
+                if (block != null)
+                {
+                    Logging.Instance.WriteLine($"block: {block.BlockDefinition.Id.SubtypeId}");
+                    var subtypeOther = block.BlockDefinition.Id.SubtypeId.ToString();
+                    if (subtypeOther == mysubtype)
+                    {
+                        // if he is me, continue
+                        if (block.SlimId() == _block.SlimBlock.SlimId())
+                        {
+                            continue;
+                        }
+                         else
+                        {
+                            // it's a matching corner block, and the path is clear
+                            matchingCorner = true;
+                            break;
+                        }
+                    }
+                    else if (subtypeOther == "ShipyardConveyor_Large" || subtypeOther == "ShipyardConveyorMount_Large")
+                    {
+                        // conveyors are allowed to be between corners
+                        continue;
+                    }
+                    else
+                    {
+                        // encountered a block that isn't a corner or conveyor so matchingCorner remains false and we bail out
+                        break;
+                    }
+                }
+            }
+            
+            if (!matchingCorner)
+            {
+                MySimpleObjectDraw.DrawLine(pos, left, material, ref r, width, blend);
+            }
+            hits.Clear();
+
+//            MyAPIGateway.Physics.CastRay(pos, up, hits);
+//            if (hits.FindAll(h => h.HitEntity as IMySlimBlock != null).Count == threshold)
+//            {
+//                MySimpleObjectDraw.DrawLine(pos, up, material, ref g, width, blend);
+//            }
+//            hits.Clear();
+//            
+//            MyAPIGateway.Physics.CastRay(pos, forward, hits);
+//            if (hits.FindAll(h => h.HitEntity as IMySlimBlock != null).Count == threshold)
+//            {
+//                MySimpleObjectDraw.DrawLine(pos, forward, material, ref b, width, blend);
+//            }
         }
 
         public override void UpdateOnceBeforeFrame()
@@ -117,7 +191,7 @@ namespace ShipyardMod
             var lockSwitch = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlOnOffSwitch, IMyCollector>("Shipyard_LockSwitch");
             lockSwitch.Title = MyStringId.GetOrCompute("Advanced Locking");
             lockSwitch.Tooltip = MyStringId.GetOrCompute("Toggles locking grids in the shipyard when grinding or welding while moving.");
-            lockSwitch.OnText=MyStringId.GetOrCompute("On");
+            lockSwitch.OnText = MyStringId.GetOrCompute("On");
             lockSwitch.OffText = MyStringId.GetOrCompute("Off");
             lockSwitch.Visible = b => b.BlockDefinition.SubtypeId.Equals("ShipyardCorner_Small");
             lockSwitch.Enabled = b => b.BlockDefinition.SubtypeId.Equals("ShipyardCorner_Small") && GetYard(b) != null;
@@ -165,7 +239,7 @@ namespace ShipyardMod
             stopButton.Action = b => Communication.SendYardCommand(b.CubeGrid.EntityId, ShipyardType.Disabled);
             MyAPIGateway.TerminalControls.AddControl<IMyCollector>(stopButton);
             Controls.Add(stopButton);
-
+            
             IMyTerminalControlSlider beamCountSlider = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlSlider, IMyCollector>("Shipyard_BeamCount");
             beamCountSlider.Title = MyStringId.GetOrCompute("Beam Count");
 
@@ -233,7 +307,7 @@ namespace ShipyardMod
             weldAction.Icon = @"Textures\GUI\Icons\Actions\Start.dds";
             weldAction.Action = b => Communication.SendYardCommand(b.CubeGrid.EntityId, ShipyardType.Weld);
             MyAPIGateway.TerminalControls.AddAction<IMyCollector>(weldAction);
-
+            
             IMyTerminalAction stopAction = MyAPIGateway.TerminalControls.CreateAction<IMyCollector>("Shipyard_StopAction");
             stopAction.Enabled = b => b.BlockDefinition.SubtypeId.Contains("ShipyardCorner");
             stopAction.Name = new StringBuilder("Stop");
@@ -335,7 +409,7 @@ namespace ShipyardMod
 
             if (value == GetLockEnabled(b))
                 return;
-            
+
             YardSettingsStruct settings = ShipyardSettings.Instance.GetYardSettings(b.CubeGrid.EntityId);
             settings.AdvancedLocking = value;
 
@@ -383,7 +457,7 @@ namespace ShipyardMod
 
             if (value == GetWeldSpeed(b))
                 return;
-            
+
             YardSettingsStruct settings = ShipyardSettings.Instance.GetYardSettings(b.CubeGrid.EntityId);
             settings.WeldMultiplier = value;
 

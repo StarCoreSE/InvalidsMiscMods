@@ -80,10 +80,7 @@ namespace ShipyardMod
             Vector3D[] directions = new Vector3D[] {
         mat.Forward,
         mat.Left,
-        mat.Up,
-       //-mat.Forward, // Backward
-       //-mat.Left,    // Right
-       //-mat.Up       // Down
+        mat.Up
     };
 
             var r = (VRageMath.Vector4)Color.Red;
@@ -95,7 +92,7 @@ namespace ShipyardMod
                 var endPoint = pos + direction * length;
                 var hits = new List<Vector3I>();
                 _block.CubeGrid.RayCastCells(pos, endPoint, hits);
-                bool matchingCorner = false;
+                bool pathIsValid = true; // Assume path is valid until proven otherwise
                 string mysubtype = _block.BlockDefinition.SubtypeId.ToString();
 
                 foreach (var hit in hits)
@@ -108,18 +105,21 @@ namespace ShipyardMod
                         {
                             if (block.SlimId() != _block.SlimBlock.SlimId())
                             {
-                                matchingCorner = true;
+                                // Found another corner block
+                                pathIsValid = false;
                                 break;
                             }
                         }
-                        else if (subtypeOther != "ShipyardConveyor_Large" && subtypeOther != "ShipyardConveyorMount_Large")
+                        else if (!(subtypeOther == "ShipyardConveyor_Large" || subtypeOther == "ShipyardConveyorMount_Large"))
                         {
-                            break; // Stop at first non-conveyor, non-matching block
+                            // Path blocked by an invalid block type
+                            pathIsValid = false;
+                            break;
                         }
                     }
                 }
 
-                if (!matchingCorner)
+                if (pathIsValid)
                 {
                     MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref r, width, blend);
                 }
@@ -127,7 +127,6 @@ namespace ShipyardMod
                 hits.Clear();
             }
         }
-
 
         public override void UpdateOnceBeforeFrame()
         {

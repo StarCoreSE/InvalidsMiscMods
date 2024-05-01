@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using ProtoBuf;
+using Sandbox.Definitions;
 using Sandbox.ModAPI;
 using VRage.Game;
 using VRage.Game.Components;
@@ -22,6 +23,7 @@ namespace Munashe.BlockSwapper
         public bool Debug = true;
         private readonly string commandPrefix = "/bs";
         private readonly float rangeLimit = 150.0f;
+        private HashSet<string> validSubtypes = new HashSet<string>();
 
         private List<MyBillboard> PersistBillboard = new List<MyBillboard>();
         private TextWriter logger;
@@ -45,6 +47,16 @@ namespace Munashe.BlockSwapper
                 MyAPIGateway.Utilities.MessageEnteredSender += HandleMessage;
             }
             logger = MyAPIGateway.Utilities.WriteFileInLocalStorage("log.txt", typeof(BlockSwapper_Session));
+
+            var defs = MyDefinitionManager.Static.GetAllDefinitions();
+            foreach (var def in defs)
+            {
+                if (def as MyCubeBlockDefinition != null)
+                {
+                    validSubtypes.Add(def.Id.SubtypeName.ToString());
+                    Log(def.Id.SubtypeName.ToString());
+                }
+            }
         }
 
         protected override void UnloadData()
@@ -76,6 +88,17 @@ namespace Munashe.BlockSwapper
             string command = args[0];
             string targetSubtype = args[1];
             string replacementSubtype = args[2];
+
+            if (!validSubtypes.Contains(targetSubtype))
+            {
+                MyAPIGateway.Utilities.ShowNotification($"unknown subtypeId '{targetSubtype}'");
+                return;
+            }
+            if (!validSubtypes.Contains(replacementSubtype))
+            {
+                MyAPIGateway.Utilities.ShowNotification($"unknown subtypeId '{replacementSubtype}'");
+                return;
+            }
 
             infostring = $"command {command}, target {targetSubtype}, replacement {replacementSubtype}";
             Log(infostring);
@@ -110,12 +133,9 @@ namespace Munashe.BlockSwapper
             MyAPIGateway.Utilities.ShowNotification("Attempting block replacement");
             Log("Attempting block replacement");
 
-            // TODO: make sure target and replacement are both real block subtypes and
-            //       notify the user if they aren't.
-
             var objectBuilder = new MyObjectBuilder_CubeBlock
             {
-                SubtypeName = replacement // mismatch; can only set SubtypeName, but replacement is SubtypeId
+                SubtypeName = replacement
             };
 
             var blocks = new List<IMySlimBlock>();
@@ -123,14 +143,25 @@ namespace Munashe.BlockSwapper
 
             foreach (var block in blocks)
             {
-                if (block.BlockDefinition.Id.SubtypeId.ToString() == target)
+                if (block.BlockDefinition.Id.SubtypeName.ToString() == target)
                 {
-                    var backupBuilder = block.GetObjectBuilder();
+                    var backupBuilder = block.GetObjectBuilder(true);
+                    //backupBuilder.SetupForGridPaste();
+                    
                     grid.RazeBlock(block.Position);
+
+                    if (Debug)
+                    {
+                        Color color = Color.Yellow;
+                        var refcolor = color.ToVector4();
+                        var worldPos = grid.GridIntegerToWorld(block.Position);
+                        MyTransparentGeometry.AddPointBillboard(MyStringId.GetOrCompute("WhiteDot"), refcolor, worldPos, 1f, 0f, -1, BlendTypeEnum.SDR, PersistBillboard);
+                    }
 
                     objectBuilder.BlockOrientation = block.Orientation;
 
-                    var blockAdded = grid.AddBlock(objectBuilder, true);
+                    var blockAdded = grid.AddBlock(objectBuilder, false);
+                    
                     if (blockAdded != null)
                     {
                         Log($"Replaced {target} with {replacement} @ {block.Position}");
@@ -139,7 +170,7 @@ namespace Munashe.BlockSwapper
                     }
                     else
                     {
-                        if (grid.AddBlock(backupBuilder, true) == null)
+                        if (grid.AddBlock(backupBuilder, false) == null)
                         {
                             Log($"Failed to undo block removal at ${block.Position}");
                             MyAPIGateway.Utilities.ShowNotification($"Failed to undo block removal at ${block.Position}");
@@ -179,12 +210,19 @@ namespace Munashe.BlockSwapper
             try
             {
                 Replacement r = MyAPIGateway.Utilities.SerializeFromBinary<Replacement>(serialized);
-                // entityId -> grid
-                // DoBlockReplacement(grid, r.targetSubtype, r.replacementSubtype);
+                var grid = MyAPIGateway.Entities.GetEntityById(r.entityId) as IMyCubeGrid;
+                if (grid != null)
+                {
+                    DoBlockReplacement(grid, r.targetSubtype, r.replacementSubtype);
+                }
+                else
+                {
+                    Log($"Server could not find IMyCubeGrid entity with matching entityId {r.entityId}");
+                }
             }
             catch (Exception ex)
             {
-
+                Log(ex.ToString());
             }
         }
     }

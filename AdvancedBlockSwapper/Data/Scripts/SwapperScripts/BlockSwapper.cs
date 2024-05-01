@@ -111,7 +111,8 @@ namespace Munashe.BlockSwapper
                 return;
             }
 
-            if (MyAPIGateway.Utilities.IsDedicated)
+            
+            if (!MyAPIGateway.Session.IsServer)
             {
                 var replacement = new Replacement(grid.EntityId, targetSubtype, replacementSubtype);
                 var serialized = MyAPIGateway.Utilities.SerializeToBinary(replacement);
@@ -132,25 +133,20 @@ namespace Munashe.BlockSwapper
             MyAPIGateway.Utilities.ShowNotification("Attempting block replacement");
             Log("Attempting block replacement");
 
-            var objectBuilder = new MyObjectBuilder_CubeBlock
-            {
-                SubtypeName = replacement
-            };
-
             var blocks = new List<IMySlimBlock>();
             grid?.GetBlocks(blocks);
             foreach (var block in blocks)
             {
                 if (block.BlockDefinition.Id.SubtypeName.ToString() == target)
                 {
-                    var backupBuilder = block.GetObjectBuilder(true);
+                    var savedBlockBuilder = block.GetObjectBuilder();
+                    var replacementBuilder = block.GetObjectBuilder(true);
+                    replacementBuilder.SubtypeName = replacement;
                     grid?.RazeBlock(block.Position);
 
-                    // Delaying block placement by one frame to ensure the physics update
-                    // if it has an inventory it'll be dropped and replaced lmao (fix this later)
+                    // TODO: (munashe) Prevent block from dumping inventory into world on removal
                     MyAPIGateway.Utilities.InvokeOnGameThread(() => {
-                        objectBuilder.BlockOrientation = block.Orientation;
-                        var blockAdded = grid?.AddBlock(objectBuilder, false);
+                        var blockAdded = grid?.AddBlock(replacementBuilder, false);
                         if (blockAdded != null)
                         {
                             Log($"Successfully replaced {target} with {replacement} at {block.Position}");
@@ -160,13 +156,13 @@ namespace Munashe.BlockSwapper
                         else
                         {
                             // Attempt to undo the raze if replacement fails
-                            grid?.AddBlock(backupBuilder, false);
+                            grid?.AddBlock(savedBlockBuilder, false);
                             Log($"Failed to replace block at {block.Position}");
                             MyAPIGateway.Utilities.ShowNotification($"Failed to replace block at {block.Position}", 5000, MyFontEnum.Red);
                         }
                     });
 
-                    if (Debug)
+                    if (Debug && grid != null)
                     {
                         Color color = Color.Yellow;
                         var refcolor = color.ToVector4();

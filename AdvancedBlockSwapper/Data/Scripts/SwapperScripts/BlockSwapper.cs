@@ -1,18 +1,14 @@
 using System;
 using System.Collections.Generic;
-using Sandbox.Definitions;
-using Sandbox.Game;
-using Sandbox.Game.Entities;
-using Sandbox.Game.Entities.Cube;
+using ProtoBuf;
 using Sandbox.ModAPI;
-using Sandbox.ModAPI.Weapons;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.Utils;
 using VRageMath;
 using VRageRender;
-using BlendTypeEnum = VRageRender.MyBillboard.BlendTypeEnum; // required for MyTransparentGeometry/MySimpleObjectDraw to be able to set blend type.
+using BlendTypeEnum = VRageRender.MyBillboard.BlendTypeEnum;
 
 namespace Munashe.BlockSwapper
 {
@@ -20,23 +16,38 @@ namespace Munashe.BlockSwapper
     public class BlockSwapper_Session : MySessionComponentBase
     {
         public static BlockSwapper_Session Instance;
-
+        private ushort NetworkId;
         public bool Debug = true;
         private readonly string commandPrefix = "/bs";
         private readonly float rangeLimit = 150.0f;
 
         private List<MyBillboard> PersistBillboard = new List<MyBillboard>();
 
-        public override void BeforeStart()
+        public override void LoadData()
         {
+            Instance = this;
+            NetworkId = 38271;
             if (MyAPIGateway.Utilities.IsDedicated)
             {
-                // script is running on a real server
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(NetworkId, ReceivedPacket);
             }
             else
             {
                 MyAPIGateway.Utilities.MessageEnteredSender += HandleMessage;
             }
+        }
+
+        protected override void UnloadData()
+        {
+            if (MyAPIGateway.Utilities.IsDedicated)
+            {
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(NetworkId, ReceivedPacket);
+            }
+            else
+            {
+                MyAPIGateway.Utilities.MessageEnteredSender -= HandleMessage;
+            }
+            Instance = null;
         }
 
         private void HandleMessage(ulong sender, string messageText, ref bool sendToOthers)
@@ -57,36 +68,51 @@ namespace Munashe.BlockSwapper
 
             if (MyAPIGateway.Utilities.IsDedicated)
             {
-                // forward the request to the server, which will DoBlockReplacement on our behalf
+                var replacement = new Replacement(grid.EntityId, targetSubtype, replacementSubtype);
+                var serialized = MyAPIGateway.Utilities.SerializeToBinary(replacement);
+                MyAPIGateway.Multiplayer.SendMessageToServer(NetworkId, serialized, true);
             }
             else
             {
                 DoBlockReplacement(grid, targetSubtype, replacementSubtype);
             }
         }
+
         private void DoBlockReplacement(IMyCubeGrid grid, string target, string replacement)
         {
             if (grid != null)
             {
+                var objectBuilder = new MyObjectBuilder_CubeBlock
+                {
+                    SubtypeName = replacement
+                };
+
                 var blocks = new List<IMySlimBlock>();
                 grid.GetBlocks(blocks);
                 foreach (var block in blocks)
                 {
                     if (block.BlockDefinition.Id.SubtypeId.ToString() == target)
                     {
-                        // TODO(munashe): replace blocks if the replacement will fit
-                        grid.RazeBlock(grid.WorldToGridInteger(block.Position));
+                        var cell = grid.WorldToGridInteger(block.Position);
+                        grid.RazeBlock(cell);
                         
-                        // remove the block from the grid
-                        // try placing the replacement
-                        // if it fails to place, notify caller (with coords of block that couldn't be replaced)
-                        //      and put the old block back where it was removed from
-                        // else continue
+                        objectBuilder.BlockOrientation = block.Orientation;
+
+                        var blockAdded = grid.AddBlock(objectBuilder, true);
+                        if (blockAdded != null)
+                        {
+                            MyAPIGateway.Utilities.ShowNotification($"Replaced block at ${cell}");
+                        }
+                        else
+                        {
+                            grid.AddBlock(block.GetObjectBuilder(), true);
+                            MyAPIGateway.Utilities.ShowNotification($"Failed to replace block at ${cell}");
+                        }
                     }
                 }
             }
         }
-
+        
         private IMyCubeGrid RaycastGridFromCamera()
         {
             var cameraMatrix = MyAPIGateway.Session.Camera.WorldMatrix;
@@ -109,19 +135,33 @@ namespace Munashe.BlockSwapper
             return null;
         }
 
-        public override void LoadData()
+        private void ReceivedPacket(ushort channelId, byte[] serialized, ulong senderSteamId, bool isSenderServer)
         {
-            Instance = this;
-        }
-
-        protected override void UnloadData()
-        {
-            if (!MyAPIGateway.Utilities.IsDedicated)
+            try
             {
-                MyAPIGateway.Utilities.MessageEnteredSender -= HandleMessage;
+                Replacement r = MyAPIGateway.Utilities.SerializeFromBinary<Replacement>(serialized);
+                // entityId -> grid
+                // DoBlockReplacement(grid, r.targetSubtype, r.replacementSubtype);
             }
-            Instance = null;
-        }
+            catch (Exception ex)
+            {
 
+            }
+        }
+    }
+
+    [ProtoContract]
+    internal class Replacement
+    {
+        [ProtoMember(1)] public readonly long entityId;
+        [ProtoMember(2)] public readonly string targetSubtype;
+        [ProtoMember(3)] public readonly string replacementSubtype;
+
+        public Replacement(long entityId, string targetSubtype, string replacementSubtype)
+        {
+            this.entityId = entityId;
+            this.targetSubtype = targetSubtype;
+            this.replacementSubtype = replacementSubtype;
+        }
     }
 }

@@ -129,7 +129,6 @@ namespace Munashe.BlockSwapper
         private int DoBlockReplacement(IMyCubeGrid grid, string target, string replacement)
         {
             int blocksSuccessfullyReplaced = 0;
-
             MyAPIGateway.Utilities.ShowNotification("Attempting block replacement");
             Log("Attempting block replacement");
 
@@ -140,15 +139,32 @@ namespace Munashe.BlockSwapper
 
             var blocks = new List<IMySlimBlock>();
             grid?.GetBlocks(blocks);
-
             foreach (var block in blocks)
             {
                 if (block.BlockDefinition.Id.SubtypeName.ToString() == target)
                 {
                     var backupBuilder = block.GetObjectBuilder(true);
-                    //backupBuilder.SetupForGridPaste();
-                    
-                    grid.RazeBlock(block.Position);
+                    grid?.RazeBlock(block.Position);
+
+                    // Delaying block placement by one frame to ensure the physics update
+                    // if it has an inventory it'll be dropped and replaced lmao (fix this later)
+                    MyAPIGateway.Utilities.InvokeOnGameThread(() => {
+                        objectBuilder.BlockOrientation = block.Orientation;
+                        var blockAdded = grid?.AddBlock(objectBuilder, false);
+                        if (blockAdded != null)
+                        {
+                            Log($"Successfully replaced {target} with {replacement} at {block.Position}");
+                            MyAPIGateway.Utilities.ShowNotification($"Replaced block at {block.Position}");
+                            blocksSuccessfullyReplaced++;
+                        }
+                        else
+                        {
+                            // Attempt to undo the raze if replacement fails
+                            grid?.AddBlock(backupBuilder, false);
+                            Log($"Failed to replace block at {block.Position}");
+                            MyAPIGateway.Utilities.ShowNotification($"Failed to replace block at {block.Position}", 5000, MyFontEnum.Red);
+                        }
+                    });
 
                     if (Debug)
                     {
@@ -157,32 +173,11 @@ namespace Munashe.BlockSwapper
                         var worldPos = grid.GridIntegerToWorld(block.Position);
                         MyTransparentGeometry.AddPointBillboard(MyStringId.GetOrCompute("WhiteDot"), refcolor, worldPos, 1f, 0f, -1, BlendTypeEnum.SDR, PersistBillboard);
                     }
-
-                    objectBuilder.BlockOrientation = block.Orientation;
-
-                    var blockAdded = grid.AddBlock(objectBuilder, false);
-                    
-                    if (blockAdded != null)
-                    {
-                        Log($"Replaced {target} with {replacement} @ {block.Position}");
-                        MyAPIGateway.Utilities.ShowNotification($"Replaced block at ${block.Position}");
-                        blocksSuccessfullyReplaced++;
-                    }
-                    else
-                    {
-                        if (grid.AddBlock(backupBuilder, false) == null)
-                        {
-                            Log($"Failed to undo block removal at ${block.Position}");
-                            MyAPIGateway.Utilities.ShowNotification($"Failed to undo block removal at ${block.Position}");
-                        }
-                        Log($"Failed to replace block at ${block.Position}");
-                        MyAPIGateway.Utilities.ShowNotification($"Failed to replace block at ${block.Position}");
-                    }
                 }
             }
             return blocksSuccessfullyReplaced;
         }
-        
+
         private IMyCubeGrid RaycastGridFromCamera()
         {
             var cameraMatrix = MyAPIGateway.Session.Camera.WorldMatrix;

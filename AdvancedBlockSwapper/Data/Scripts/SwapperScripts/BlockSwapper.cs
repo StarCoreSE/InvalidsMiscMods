@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Runtime.CompilerServices;
 using ProtoBuf;
 using Sandbox.ModAPI;
 using VRage.Game;
@@ -22,6 +24,13 @@ namespace Munashe.BlockSwapper
         private readonly float rangeLimit = 150.0f;
 
         private List<MyBillboard> PersistBillboard = new List<MyBillboard>();
+        private TextWriter logger;
+
+        public void Log(string line)
+        {
+            logger.WriteLine(line);
+            logger.Flush();
+        }
 
         public override void LoadData()
         {
@@ -35,6 +44,7 @@ namespace Munashe.BlockSwapper
             {
                 MyAPIGateway.Utilities.MessageEnteredSender += HandleMessage;
             }
+            logger = MyAPIGateway.Utilities.WriteFileInLocalStorage("log.txt", typeof(BlockSwapper_Session));
         }
 
         protected override void UnloadData()
@@ -47,24 +57,36 @@ namespace Munashe.BlockSwapper
             {
                 MyAPIGateway.Utilities.MessageEnteredSender -= HandleMessage;
             }
+            logger?.Close();
             Instance = null;
         }
 
         private void HandleMessage(ulong sender, string messageText, ref bool sendToOthers)
         {
             if (!messageText.StartsWith(commandPrefix)) { return; }
+            var infostring = $"sender {sender}: {messageText}";
+            Log(infostring);
 
             sendToOthers = false;
 
             var args = messageText.Substring(commandPrefix.Length).Split(' ');
+            
             if (args.Length != 3) { return; }
 
             string command = args[0];
             string targetSubtype = args[1];
             string replacementSubtype = args[2];
 
+            infostring = $"command {command}, target {targetSubtype}, replacement {replacementSubtype}";
+            Log(infostring);
+
             var grid = RaycastGridFromCamera();
-            if (grid == null) { return; }
+            infostring = grid?.ToString() ?? "No grid hit by Raycast";
+            Log(infostring);
+            if (grid == null) {
+                MyAPIGateway.Utilities.ShowNotification(infostring);
+                return;
+            }
 
             if (MyAPIGateway.Utilities.IsDedicated)
             {
@@ -74,43 +96,60 @@ namespace Munashe.BlockSwapper
             }
             else
             {
-                DoBlockReplacement(grid, targetSubtype, replacementSubtype);
+                var result = DoBlockReplacement(grid, targetSubtype, replacementSubtype);
+
+                MyAPIGateway.Utilities.ShowNotification($"Replaced {result} blocks");
+                Log($"Replaced {result} blocks");
             }
         }
 
-        private void DoBlockReplacement(IMyCubeGrid grid, string target, string replacement)
+        private int DoBlockReplacement(IMyCubeGrid grid, string target, string replacement)
         {
-            if (grid != null)
+            int blocksSuccessfullyReplaced = 0;
+
+            MyAPIGateway.Utilities.ShowNotification("Attempting block replacement");
+            Log("Attempting block replacement");
+
+            // TODO: make sure target and replacement are both real block subtypes and
+            //       notify the user if they aren't.
+
+            var objectBuilder = new MyObjectBuilder_CubeBlock
             {
-                var objectBuilder = new MyObjectBuilder_CubeBlock
-                {
-                    SubtypeName = replacement
-                };
+                SubtypeName = replacement // mismatch; can only set SubtypeName, but replacement is SubtypeId
+            };
 
-                var blocks = new List<IMySlimBlock>();
-                grid.GetBlocks(blocks);
-                foreach (var block in blocks)
+            var blocks = new List<IMySlimBlock>();
+            grid?.GetBlocks(blocks);
+
+            foreach (var block in blocks)
+            {
+                if (block.BlockDefinition.Id.SubtypeId.ToString() == target)
                 {
-                    if (block.BlockDefinition.Id.SubtypeId.ToString() == target)
+                    var backupBuilder = block.GetObjectBuilder();
+                    grid.RazeBlock(block.Position);
+
+                    objectBuilder.BlockOrientation = block.Orientation;
+
+                    var blockAdded = grid.AddBlock(objectBuilder, true);
+                    if (blockAdded != null)
                     {
-                        var cell = grid.WorldToGridInteger(block.Position);
-                        grid.RazeBlock(cell);
-                        
-                        objectBuilder.BlockOrientation = block.Orientation;
-
-                        var blockAdded = grid.AddBlock(objectBuilder, true);
-                        if (blockAdded != null)
+                        Log($"Replaced {target} with {replacement} @ {block.Position}");
+                        MyAPIGateway.Utilities.ShowNotification($"Replaced block at ${block.Position}");
+                        blocksSuccessfullyReplaced++;
+                    }
+                    else
+                    {
+                        if (grid.AddBlock(backupBuilder, true) == null)
                         {
-                            MyAPIGateway.Utilities.ShowNotification($"Replaced block at ${cell}");
+                            Log($"Failed to undo block removal at ${block.Position}");
+                            MyAPIGateway.Utilities.ShowNotification($"Failed to undo block removal at ${block.Position}");
                         }
-                        else
-                        {
-                            grid.AddBlock(block.GetObjectBuilder(), true);
-                            MyAPIGateway.Utilities.ShowNotification($"Failed to replace block at ${cell}");
-                        }
+                        Log($"Failed to replace block at ${block.Position}");
+                        MyAPIGateway.Utilities.ShowNotification($"Failed to replace block at ${block.Position}");
                     }
                 }
             }
+            return blocksSuccessfullyReplaced;
         }
         
         private IMyCubeGrid RaycastGridFromCamera()

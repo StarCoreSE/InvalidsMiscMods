@@ -65,6 +65,10 @@ namespace ShipyardMod
 
         public override void UpdateAfterSimulation()
         {
+            if (MyAPIGateway.Utilities.IsDedicated)
+            {
+                return;
+            }
             if (_block?.CubeGrid?.Physics == null)
             {
                 return;

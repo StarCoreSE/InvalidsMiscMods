@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Sandbox.Common.ObjectBuilders;
 using Sandbox.Game.EntityComponents;
@@ -13,8 +14,13 @@ using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
+using VRageMath;
 using VRage.ObjectBuilders;
 using VRage.Utils;
+using VRageRender.Import;
+using Sandbox.Engine.Physics;
+using System.Text.RegularExpressions;
+using ShipyardMod.ProcessHandlers;
 
 namespace ShipyardMod
 {
@@ -57,6 +63,104 @@ namespace ShipyardMod
             NeedsUpdate = MyEntityUpdateEnum.NONE;
         }
 
+        public override void UpdateAfterSimulation()
+        {
+            if (_block?.CubeGrid?.Physics == null)
+            {
+                return;
+            }
+
+            // Check if the corner is part of a valid shipyard
+            bool isValidShipyard = ProcessShipyardDetection.ShipyardsList.Any(yard => yard.Tools.Contains(_block));
+
+            if (!isValidShipyard)
+            {
+                var pos = _block.GetPosition();
+                var offset = 2.5f;
+                var mat = _block.WorldMatrix;
+                float width = 0.125f;
+                pos += -mat.Forward * offset;
+                pos += -mat.Left * offset;
+                pos += -mat.Up * offset;
+
+                Vector3D[] directions = new Vector3D[] {
+            mat.Forward,
+            mat.Left,
+            mat.Up
+        };
+
+                var red = (VRageMath.Vector4)Color.Red;
+                var yellow = (VRageMath.Vector4)Color.Yellow;
+                var blue = (VRageMath.Vector4)Color.Blue;
+
+                var material = MyStringId.GetOrCompute("Square");
+                var blend = VRageRender.MyBillboard.BlendTypeEnum.PostPP;
+
+                string subtypeShipyardCorner = _block.BlockDefinition.SubtypeId.ToString();
+                float maxLength = 1000.0f;
+                var cells = new List<Vector3I>();
+                foreach (var direction in directions)
+                {
+                    var endPoint = pos + direction * maxLength;
+                    cells.Clear();
+                    _block.CubeGrid.RayCastCells(pos, endPoint, cells);
+
+                    int indexOfOpposingShipyardCorner = -1;
+                    for (int i = 0; i < cells.Count; i++)
+                    {
+                        var block = _block.CubeGrid.GetCubeBlock(cells[i]);
+                        if (block != null)
+                        {
+                            var subtypeOther = block.BlockDefinition.Id.SubtypeId.ToString();
+                            if (subtypeOther == subtypeShipyardCorner && block.SlimId() != _block.SlimBlock.SlimId())
+                            {
+                                indexOfOpposingShipyardCorner = i;
+                                break;
+                            }
+                        }
+                    }
+                    if (indexOfOpposingShipyardCorner > -1)
+                    {
+                        endPoint = pos + direction * (indexOfOpposingShipyardCorner + 4.5);
+                        var blockedByInvalid = false;
+                        var pathHasEmptyCells = false;
+                        for (int i = 3; i < indexOfOpposingShipyardCorner - 1; i++)
+                        {
+                            var block = _block.CubeGrid.GetCubeBlock(cells[i]);
+                            if (block != null)
+                            {
+                                var subtypeOther = block.BlockDefinition.Id.SubtypeId.ToString();
+                                if (!(subtypeOther == "ShipyardConveyor_Large" || subtypeOther == "ShipyardConveyorMount_Large"))
+                                {
+                                    blockedByInvalid = true;
+                                    break;
+                                }
+                            }
+                            else
+                            {
+                                pathHasEmptyCells = true;
+                            }
+                        }
+                        if (blockedByInvalid)
+                        {
+                            MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref red, width, blend);
+                            continue;
+                        }
+                        else if (pathHasEmptyCells)
+                        {
+                            MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref yellow, width, blend);
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref blue, width, blend);
+                        continue;
+                    }
+                }
+            }
+        }
+
         public override void UpdateOnceBeforeFrame()
         {
             if (_init)
@@ -89,7 +193,7 @@ namespace ShipyardMod
             var lockSwitch = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlOnOffSwitch, IMyCollector>("Shipyard_LockSwitch");
             lockSwitch.Title = MyStringId.GetOrCompute("Advanced Locking");
             lockSwitch.Tooltip = MyStringId.GetOrCompute("Toggles locking grids in the shipyard when grinding or welding while moving.");
-            lockSwitch.OnText=MyStringId.GetOrCompute("On");
+            lockSwitch.OnText = MyStringId.GetOrCompute("On");
             lockSwitch.OffText = MyStringId.GetOrCompute("Off");
             lockSwitch.Visible = b => b.BlockDefinition.SubtypeId.Equals("ShipyardCorner_Small");
             lockSwitch.Enabled = b => b.BlockDefinition.SubtypeId.Equals("ShipyardCorner_Small") && GetYard(b) != null;
@@ -137,7 +241,7 @@ namespace ShipyardMod
             stopButton.Action = b => Communication.SendYardCommand(b.CubeGrid.EntityId, ShipyardType.Disabled);
             MyAPIGateway.TerminalControls.AddControl<IMyCollector>(stopButton);
             Controls.Add(stopButton);
-
+            
             IMyTerminalControlSlider beamCountSlider = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlSlider, IMyCollector>("Shipyard_BeamCount");
             beamCountSlider.Title = MyStringId.GetOrCompute("Beam Count");
 
@@ -205,7 +309,7 @@ namespace ShipyardMod
             weldAction.Icon = @"Textures\GUI\Icons\Actions\Start.dds";
             weldAction.Action = b => Communication.SendYardCommand(b.CubeGrid.EntityId, ShipyardType.Weld);
             MyAPIGateway.TerminalControls.AddAction<IMyCollector>(weldAction);
-
+            
             IMyTerminalAction stopAction = MyAPIGateway.TerminalControls.CreateAction<IMyCollector>("Shipyard_StopAction");
             stopAction.Enabled = b => b.BlockDefinition.SubtypeId.Contains("ShipyardCorner");
             stopAction.Name = new StringBuilder("Stop");
@@ -307,7 +411,7 @@ namespace ShipyardMod
 
             if (value == GetLockEnabled(b))
                 return;
-            
+
             YardSettingsStruct settings = ShipyardSettings.Instance.GetYardSettings(b.CubeGrid.EntityId);
             settings.AdvancedLocking = value;
 
@@ -355,7 +459,7 @@ namespace ShipyardMod
 
             if (value == GetWeldSpeed(b))
                 return;
-            
+
             YardSettingsStruct settings = ShipyardSettings.Instance.GetYardSettings(b.CubeGrid.EntityId);
             settings.WeldMultiplier = value;
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Sandbox.Common.ObjectBuilders;
 using Sandbox.Game.EntityComponents;
@@ -19,6 +20,7 @@ using VRage.Utils;
 using VRageRender.Import;
 using Sandbox.Engine.Physics;
 using System.Text.RegularExpressions;
+using ShipyardMod.ProcessHandlers;
 
 namespace ShipyardMod
 {
@@ -68,109 +70,94 @@ namespace ShipyardMod
                 return;
             }
 
-            var pos = _block.GetPosition();
-            var offset = 2.5f;
-            var mat = _block.WorldMatrix;
-            float width = 0.125f;
-            pos += -mat.Forward * offset;
-            pos += -mat.Left * offset;
-            pos += -mat.Up * offset;
+            // Check if the corner is part of a valid shipyard
+            bool isValidShipyard = ProcessShipyardDetection.ShipyardsList.Any(yard => yard.Tools.Contains(_block));
 
-            Vector3D[] directions = new Vector3D[] {
-                mat.Forward,
-                mat.Left,
-                mat.Up
-            };
-
-            var lineColor = (VRageMath.Vector4)Color.Red;
-
-            var red = (VRageMath.Vector4)Color.Red;
-            var green = (VRageMath.Vector4)Color.Green;
-            var blue = (VRageMath.Vector4)Color.Blue;
-            var yellow = (VRageMath.Vector4)Color.Yellow;
-
-            var material = MyStringId.GetOrCompute("Square");
-            var blend = VRageRender.MyBillboard.BlendTypeEnum.PostPP;
-
-            string subtypeShipyardCorner = _block.BlockDefinition.SubtypeId.ToString();
-            float maxLength = 1000.0f; // let me guess, you need more?
-            var cells = new List<Vector3I>();
-            foreach (var direction in directions)
+            if (!isValidShipyard)
             {
-                var endPoint = pos + direction * maxLength;
-                cells.Clear();
-                _block.CubeGrid.RayCastCells(pos, endPoint, cells);
+                var pos = _block.GetPosition();
+                var offset = 2.5f;
+                var mat = _block.WorldMatrix;
+                float width = 0.125f;
+                pos += -mat.Forward * offset;
+                pos += -mat.Left * offset;
+                pos += -mat.Up * offset;
 
-                // path statuses:
-                // red     = blocked by invalid block
-                // yellow  = is only blocked by valid blocks
-                // green   = completely valid segment
-                // blue    = is unbounded by opposing shipyard corner
-                
-                int indexOfOpposingShipyardCorner = -1;
-                for (int i = 0; i < cells.Count; i++)
-                {
-                    var block = _block.CubeGrid.GetCubeBlock(cells[i]);
-                    if (block != null)
-                    {
-                        var subtypeOther = block.BlockDefinition.Id.SubtypeId.ToString();
-                        if (subtypeOther == subtypeShipyardCorner && block.SlimId() != _block.SlimBlock.SlimId())
-                        {
-                            indexOfOpposingShipyardCorner = i;
-                            break;
-                        }
-                    }
-                }
-                if (indexOfOpposingShipyardCorner > -1)
-                {
-                    // the segment is bounded by two shipyard corners
+                Vector3D[] directions = new Vector3D[] {
+            mat.Forward,
+            mat.Left,
+            mat.Up
+        };
 
-                    // clamp endpoint to position of opposing shipyard corner
-                    endPoint = pos + direction * (indexOfOpposingShipyardCorner + 4.5);
-                    var blockedByInvalid = false;
-                    var pathHasEmptyCells = false;
-                    for (int i = 3; i < indexOfOpposingShipyardCorner-1; i++)
+                var red = (VRageMath.Vector4)Color.Red;
+                var yellow = (VRageMath.Vector4)Color.Yellow;
+                var blue = (VRageMath.Vector4)Color.Blue;
+
+                var material = MyStringId.GetOrCompute("Square");
+                var blend = VRageRender.MyBillboard.BlendTypeEnum.PostPP;
+
+                string subtypeShipyardCorner = _block.BlockDefinition.SubtypeId.ToString();
+                float maxLength = 1000.0f;
+                var cells = new List<Vector3I>();
+                foreach (var direction in directions)
+                {
+                    var endPoint = pos + direction * maxLength;
+                    cells.Clear();
+                    _block.CubeGrid.RayCastCells(pos, endPoint, cells);
+
+                    int indexOfOpposingShipyardCorner = -1;
+                    for (int i = 0; i < cells.Count; i++)
                     {
-                        // iterate the closed segment to determine status
                         var block = _block.CubeGrid.GetCubeBlock(cells[i]);
                         if (block != null)
                         {
                             var subtypeOther = block.BlockDefinition.Id.SubtypeId.ToString();
-                            //encountered non-shipyard corner block
-                            if (!(subtypeOther == "ShipyardConveyor_Large" || subtypeOther == "ShipyardConveyorMount_Large"))
+                            if (subtypeOther == subtypeShipyardCorner && block.SlimId() != _block.SlimBlock.SlimId())
                             {
-                                // condition red; path is blocked by invalid block
-                                blockedByInvalid = true;
+                                indexOfOpposingShipyardCorner = i;
                                 break;
                             }
                         }
-                        else
+                    }
+                    if (indexOfOpposingShipyardCorner > -1)
+                    {
+                        endPoint = pos + direction * (indexOfOpposingShipyardCorner + 4.5);
+                        var blockedByInvalid = false;
+                        var pathHasEmptyCells = false;
+                        for (int i = 3; i < indexOfOpposingShipyardCorner - 1; i++)
                         {
-                            pathHasEmptyCells = true;
+                            var block = _block.CubeGrid.GetCubeBlock(cells[i]);
+                            if (block != null)
+                            {
+                                var subtypeOther = block.BlockDefinition.Id.SubtypeId.ToString();
+                                if (!(subtypeOther == "ShipyardConveyor_Large" || subtypeOther == "ShipyardConveyorMount_Large"))
+                                {
+                                    blockedByInvalid = true;
+                                    break;
+                                }
+                            }
+                            else
+                            {
+                                pathHasEmptyCells = true;
+                            }
                         }
-                    }
-                    if (blockedByInvalid)
-                    {
-                        MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref red, width, blend);
-                        continue;
-                    }
-                    else if (pathHasEmptyCells)
-                    {
-                        MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref yellow, width, blend);
-                        continue;
+                        if (blockedByInvalid)
+                        {
+                            MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref red, width, blend);
+                            continue;
+                        }
+                        else if (pathHasEmptyCells)
+                        {
+                            MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref yellow, width, blend);
+                            continue;
+                        }
                     }
                     else
                     {
-                        MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref green, width, blend);
+                        MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref blue, width, blend);
                         continue;
                     }
                 }
-                else
-                {
-                    MySimpleObjectDraw.DrawLine(pos, endPoint, material, ref blue, width, blend);
-                    continue;
-                }
-                
             }
         }
 

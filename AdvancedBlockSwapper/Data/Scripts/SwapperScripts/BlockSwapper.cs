@@ -318,7 +318,8 @@ namespace Munashe.BlockSwapper
                             Log("Server received packet with non-null Orders");
                             return;
                         }
-                        DoBlockReplacementServer(packet);
+                        var replaceCount = DoBlockReplacementServer(packet);
+                        Log($"replaced {replaceCount}");
                     }
                 }
                 else

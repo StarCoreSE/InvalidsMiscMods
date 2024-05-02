@@ -44,7 +44,7 @@ namespace Munashe.BlockSwapper
             MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(NetworkId, ReceivedPacket);
             if (MyAPIGateway.Utilities.IsDedicated)
             {
-                
+
             }
             else
             {
@@ -56,7 +56,7 @@ namespace Munashe.BlockSwapper
             foreach (var def in defs.OfType<MyCubeBlockDefinition>())
             {
                 validSubtypes.Add(def.Id.SubtypeName);
-                Log(def.Id.SubtypeName);
+                Log($"Loaded subtype: {def.Id.SubtypeName}");
             }
         }
 
@@ -65,7 +65,7 @@ namespace Munashe.BlockSwapper
             MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(NetworkId, ReceivedPacket);
             if (MyAPIGateway.Utilities.IsDedicated)
             {
-                
+
             }
             else
             {
@@ -77,6 +77,7 @@ namespace Munashe.BlockSwapper
 
         private void HandleMessage(ulong sender, string messageText, ref bool sendToOthers)
         {
+            Log($"Received message: {messageText} from sender {sender}");
             if (!messageText.StartsWith(commandPrefix)) { return; }
             var infostring = $"sender {sender}: {messageText}";
             Log(infostring);
@@ -84,7 +85,7 @@ namespace Munashe.BlockSwapper
             sendToOthers = false;
 
             var args = messageText.Substring(commandPrefix.Length).Split(' ');
-            
+
             if (args.Length != 3) { return; }
 
             var command = args[0];
@@ -94,11 +95,13 @@ namespace Munashe.BlockSwapper
             if (!validSubtypes.Contains(targetSubtype))
             {
                 MyAPIGateway.Utilities.ShowNotification($"unknown subtypeId '{targetSubtype}'");
+                Log($"Unknown target subtypeId '{targetSubtype}'");
                 return;
             }
             if (!validSubtypes.Contains(replacementSubtype))
             {
                 MyAPIGateway.Utilities.ShowNotification($"unknown subtypeId '{replacementSubtype}'");
+                Log($"Unknown replacement subtypeId '{replacementSubtype}'");
                 return;
             }
 
@@ -108,7 +111,8 @@ namespace Munashe.BlockSwapper
             var grid = RaycastGridFromCamera();
             infostring = grid?.ToString() ?? "No grid hit by Raycast";
             Log(infostring);
-            if (grid == null) {
+            if (grid == null)
+            {
                 MyAPIGateway.Utilities.ShowNotification(infostring);
                 return;
             }
@@ -119,6 +123,7 @@ namespace Munashe.BlockSwapper
                 var serialized = MyAPIGateway.Utilities.SerializeToBinary(replacement);
                 MyAPIGateway.Multiplayer.SendMessageToServer(NetworkId, serialized, true);
                 MyAPIGateway.Utilities.ShowNotification("Sent packet to server");
+                Log("Sent packet to server");
             }
             else
             {
@@ -144,7 +149,7 @@ namespace Munashe.BlockSwapper
                 var replacementBuilder = block.GetObjectBuilder(true);
                 replacementBuilder.SubtypeName = replacement;
                 grid?.RazeBlock(block.Position);
-                    
+
                 // TODO: (munashe) Prevent block from dumping inventory into world on removal
                 MyAPIGateway.Utilities.InvokeOnGameThread(() => {
                     var blockAdded = grid?.AddBlock(replacementBuilder, false);
@@ -209,7 +214,7 @@ namespace Munashe.BlockSwapper
                     return 0;
                 }
                 replacementBuilder.SubtypeName = packet.ReplacementSubtype;
-                
+
                 grid.RazeBlock(block.Position);
 
                 Log("InvokeOnGameThread...");
@@ -261,7 +266,7 @@ namespace Munashe.BlockSwapper
             var cameraMatrix = MyAPIGateway.Session.Camera.WorldMatrix;
             var hits = new List<IHitInfo>();
             MyAPIGateway.Physics.CastRay(cameraMatrix.Translation, cameraMatrix.Translation + cameraMatrix.Forward * rangeLimit, hits);
-            foreach ( var hit in hits )
+            foreach (var hit in hits)
             {
                 var grid = hit.HitEntity as IMyCubeGrid;
                 if (grid?.Physics == null) continue;
@@ -329,11 +334,9 @@ namespace Munashe.BlockSwapper
             }
             catch (Exception ex)
             {
-                Log(ex.ToString());
+
             }
         }
-
-        
     }
 
     [ProtoContract]
@@ -344,7 +347,7 @@ namespace Munashe.BlockSwapper
         [ProtoMember(13)] public Vector3I Position;
         [ProtoMember(14)] public Vector3 Paint;
 
-        private Order() {}
+        private Order() { }
 
         public Order(IMySlimBlock block)
         {
@@ -363,7 +366,7 @@ namespace Munashe.BlockSwapper
         [ProtoMember(3)] public string ReplacementSubtype;
         [ProtoMember(4)] public List<Order> Orders;
 
-        private Packet() {}
+        private Packet() { }
         public Packet(long entityId, string targetSubtype, string replacementSubtype)
         {
             EntityId = entityId;

@@ -118,6 +118,7 @@ namespace Munashe.BlockSwapper
                 var replacement = new Packet(grid.EntityId, targetSubtype, replacementSubtype);
                 var serialized = MyAPIGateway.Utilities.SerializeToBinary(replacement);
                 MyAPIGateway.Multiplayer.SendMessageToServer(NetworkId, serialized, true);
+                MyAPIGateway.Utilities.ShowNotification("Sent packet to server");
             }
             else
             {
@@ -231,11 +232,26 @@ namespace Munashe.BlockSwapper
                     }
                 });
             }
-
+            Log($"blocksSuccessfullyReplaced {blocksSuccessfullyReplaced}");
             if (blocksSuccessfullyReplaced > 0)
             {
                 var serialized = MyAPIGateway.Utilities.SerializeToBinary(packet);
-                MyAPIGateway.Multiplayer.SendMessageToOthers(NetworkId, serialized);
+                if (serialized == null)
+                {
+                    Log("failed to serialize packet");
+                    return 0;
+                }
+
+                Log("Serialized packet");
+                var players = new List<IMyPlayer>();
+                MyAPIGateway.Multiplayer.Players.GetPlayers(players);
+                Log($"Players {players.Count}");
+                players.ForEach(p =>
+                {
+                    MyAPIGateway.Multiplayer.SendMessageTo(NetworkId, serialized, p.SteamUserId);
+                    Log($"Forwarded packet to {p.SteamUserId}");
+                });
+                Log("Done ");
             }
             return blocksSuccessfullyReplaced;
         }
@@ -262,11 +278,14 @@ namespace Munashe.BlockSwapper
 
         private void ReceivedPacket(ushort channelId, byte[] serialized, ulong senderSteamId, bool isSenderServer)
         {
+            Log("Entered ReceivedPacket");
             try
             {
+                Log("packet received");
                 var packet = MyAPIGateway.Utilities.SerializeFromBinary<Packet>(serialized);
                 if (packet != null)
                 {
+                    Log("packet is not null");
                     var grid = MyAPIGateway.Entities.GetEntityById(packet.EntityId) as IMyCubeGrid;
                     if (grid == null)
                     {
@@ -275,6 +294,7 @@ namespace Munashe.BlockSwapper
                     }
                     if (isSenderServer && packet.Orders != null)
                     {
+                        Log("packet orders is non-null");
                         foreach (var order in packet.Orders)
                         {
                             var ob = MyObjectBuilderSerializer.CreateNewObject(order.Id);
@@ -292,6 +312,7 @@ namespace Munashe.BlockSwapper
                     }
                     else
                     {
+                        Log("isSenderServer is false");
                         if (packet.Orders != null)
                         {
                             Log("Server received packet with non-null Orders");
@@ -317,10 +338,10 @@ namespace Munashe.BlockSwapper
     [ProtoContract]
     internal class Order
     {
-        [ProtoMember(1)] public MyDefinitionId Id;
-        [ProtoMember(2)] public MyBlockOrientation Orientation;
-        [ProtoMember(3)] public Vector3I Position;
-        [ProtoMember(4)] public Vector3 Paint;
+        [ProtoMember(10)] public MyDefinitionId Id;
+        [ProtoMember(12)] public MyBlockOrientation Orientation;
+        [ProtoMember(13)] public Vector3I Position;
+        [ProtoMember(14)] public Vector3 Paint;
 
         private Order() {}
 

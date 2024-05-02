@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using ProtoBuf;
 using Sandbox.Definitions;
+using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
+using VRage.ObjectBuilders;
 using VRage.Utils;
 using VRageMath;
 using VRageRender;
@@ -38,9 +41,10 @@ namespace Munashe.BlockSwapper
         {
             Instance = this;
             NetworkId = 38271;
+            MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(NetworkId, ReceivedPacket);
             if (MyAPIGateway.Utilities.IsDedicated)
             {
-                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(NetworkId, ReceivedPacket);
+                
             }
             else
             {
@@ -49,21 +53,19 @@ namespace Munashe.BlockSwapper
             logger = MyAPIGateway.Utilities.WriteFileInLocalStorage("log.txt", typeof(BlockSwapper_Session));
 
             var defs = MyDefinitionManager.Static.GetAllDefinitions();
-            foreach (var def in defs)
+            foreach (var def in defs.OfType<MyCubeBlockDefinition>())
             {
-                if (def as MyCubeBlockDefinition != null)
-                {
-                    validSubtypes.Add(def.Id.SubtypeName.ToString());
-                    Log(def.Id.SubtypeName.ToString());
-                }
+                validSubtypes.Add(def.Id.SubtypeName);
+                Log(def.Id.SubtypeName);
             }
         }
 
         protected override void UnloadData()
         {
+            MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(NetworkId, ReceivedPacket);
             if (MyAPIGateway.Utilities.IsDedicated)
             {
-                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(NetworkId, ReceivedPacket);
+                
             }
             else
             {
@@ -85,9 +87,9 @@ namespace Munashe.BlockSwapper
             
             if (args.Length != 3) { return; }
 
-            string command = args[0];
-            string targetSubtype = args[1];
-            string replacementSubtype = args[2];
+            var command = args[0];
+            var targetSubtype = args[1];
+            var replacementSubtype = args[2];
 
             if (!validSubtypes.Contains(targetSubtype))
             {
@@ -111,18 +113,9 @@ namespace Munashe.BlockSwapper
                 return;
             }
 
-            // TODO: DoBlockReplacement is not properly synced, so the player only sees the change done by
-            //       the server after reconnecting. RazeBlocks seems to be synced, so the player immediately
-            //       sees the blocks be destroyed. I can't just run a DoBlockReplacement on server and client
-            //       simultaneously, because RazeBlocks is synced. They end up trampling over each-other.
-  
-            // Consider manually checking the bounding box of the replacement block against the grid instead
-            // of using the "trick" of deleting and trying to place the new block. This also leads into
-            // adjusting the position of the new block relative to the bounds of the old block.
-
             if (!MyAPIGateway.Session.IsServer)
             {
-                var replacement = new Replacement(grid.EntityId, targetSubtype, replacementSubtype);
+                var replacement = new Packet(grid.EntityId, targetSubtype, replacementSubtype);
                 var serialized = MyAPIGateway.Utilities.SerializeToBinary(replacement);
                 MyAPIGateway.Multiplayer.SendMessageToServer(NetworkId, serialized, true);
             }
@@ -137,7 +130,7 @@ namespace Munashe.BlockSwapper
 
         private int DoBlockReplacement(IMyCubeGrid grid, string target, string replacement)
         {
-            int blocksSuccessfullyReplaced = 0;
+            var blocksSuccessfullyReplaced = 0;
             MyAPIGateway.Utilities.ShowNotification("Attempting block replacement");
             Log("Attempting block replacement");
 
@@ -145,39 +138,104 @@ namespace Munashe.BlockSwapper
             grid?.GetBlocks(blocks);
             foreach (var block in blocks)
             {
-                if (block.BlockDefinition.Id.SubtypeName.ToString() == target)
-                {
-                    var savedBlockBuilder = block.GetObjectBuilder();
-                    var replacementBuilder = block.GetObjectBuilder(true);
-                    replacementBuilder.SubtypeName = replacement;
-                    grid?.RazeBlock(block.Position);
+                if (block.BlockDefinition.Id.SubtypeName != target) continue;
+                var savedBlockBuilder = block.GetObjectBuilder();
+                var replacementBuilder = block.GetObjectBuilder(true);
+                replacementBuilder.SubtypeName = replacement;
+                grid?.RazeBlock(block.Position);
                     
-                    // TODO: (munashe) Prevent block from dumping inventory into world on removal
-                    MyAPIGateway.Utilities.InvokeOnGameThread(() => {
-                        var blockAdded = grid?.AddBlock(replacementBuilder, false);
-                        if (blockAdded != null)
-                        {
-                            Log($"Successfully replaced {target} with {replacement} at {block.Position}");
-                            MyAPIGateway.Utilities.ShowNotification($"Replaced block at {block.Position}");
-                            blocksSuccessfullyReplaced++;
-                        }
-                        else
-                        {
-                            // Attempt to undo the raze if replacement fails
-                            grid?.AddBlock(savedBlockBuilder, false);
-                            Log($"Failed to replace block at {block.Position}");
-                            MyAPIGateway.Utilities.ShowNotification($"Failed to replace block at {block.Position}", 5000, MyFontEnum.Red);
-                        }
-                    });
-
-                    if (!MyAPIGateway.Utilities.IsDedicated && Debug && grid != null)
+                // TODO: (munashe) Prevent block from dumping inventory into world on removal
+                MyAPIGateway.Utilities.InvokeOnGameThread(() => {
+                    var blockAdded = grid?.AddBlock(replacementBuilder, false);
+                    if (blockAdded != null)
                     {
-                        Color color = Color.Yellow;
-                        var refcolor = color.ToVector4();
-                        var worldPos = grid.GridIntegerToWorld(block.Position);
-                        MyTransparentGeometry.AddPointBillboard(MyStringId.GetOrCompute("WhiteDot"), refcolor, worldPos, 1f, 0f, -1, BlendTypeEnum.SDR, PersistBillboard);
+                        Log($"Successfully replaced {target} with {replacement} at {block.Position}");
+                        MyAPIGateway.Utilities.ShowNotification($"Replaced block at {block.Position}");
+                        blocksSuccessfullyReplaced++;
                     }
+                    else
+                    {
+                        // Attempt to undo the raze if replacement fails
+                        grid?.AddBlock(savedBlockBuilder, false);
+                        Log($"Failed to replace block at {block.Position}");
+                        MyAPIGateway.Utilities.ShowNotification($"Failed to replace block at {block.Position}", 5000, MyFontEnum.Red);
+                    }
+                });
+
+                if (MyAPIGateway.Utilities.IsDedicated || !Debug || grid == null) continue;
+                var color = Color.Yellow;
+                var refcolor = color.ToVector4();
+                var worldPos = grid.GridIntegerToWorld(block.Position);
+                MyTransparentGeometry.AddPointBillboard(MyStringId.GetOrCompute("WhiteDot"), refcolor, worldPos, 1f, 0f, -1, BlendTypeEnum.SDR, PersistBillboard);
+            }
+            return blocksSuccessfullyReplaced;
+        }
+
+        // FatBlocks only
+        private int DoBlockReplacementServer(Packet packet)
+        {
+            // try MyCubeGrid.BuildBlockRequestInternal(); ?
+            if (packet == null) return 0;
+            var grid = MyAPIGateway.Entities.GetEntityById(packet.EntityId) as IMyCubeGrid;
+            if (grid == null)
+            {
+                Log("grid must be non-null");
+                return 0;
+            }
+
+            packet.Orders = new List<Order>();
+
+            var blocksSuccessfullyReplaced = 0;
+            Log("Attempting block packet on server");
+
+            var blocks = new List<IMySlimBlock>();
+            grid.GetBlocks(blocks);
+            Log($"Iterating grid with {blocks.Count} blocks...");
+            foreach (var block in blocks.Where(block => block.FatBlock != null && block.BlockDefinition.Id.SubtypeName == packet.TargetSubtype))
+            {
+                Log($"Found candidate for packet {block.FatBlock.DisplayName} @ {block.Position}");
+
+                var savedBlockBuilder = block.GetObjectBuilder();
+                var replacementBuilder = block.GetObjectBuilder(true);
+                if (savedBlockBuilder == null)
+                {
+                    Log("savedBlockBuilder is null");
+                    return 0;
                 }
+                if (replacementBuilder == null)
+                {
+                    Log("replacementBuilder is null");
+                    return 0;
+                }
+                replacementBuilder.SubtypeName = packet.ReplacementSubtype;
+                
+                grid.RazeBlock(block.Position);
+
+                Log("InvokeOnGameThread...");
+                MyAPIGateway.Utilities.InvokeOnGameThread(() => {
+                    var addedBlock = grid.AddBlock(replacementBuilder, false);
+
+                    if (addedBlock != null)
+                    {
+                        Log($"Successfully replaced {packet.TargetSubtype} with {packet.ReplacementSubtype} at {block.Position}");
+                        MyAPIGateway.Utilities.ShowNotification($"Replaced block at {block.Position}");
+                        packet.Orders.Add(new Order(addedBlock));
+                        blocksSuccessfullyReplaced++;
+                    }
+                    else
+                    {
+                        // Attempt to undo the removal if packet fails
+                        grid.AddBlock(savedBlockBuilder, false);
+                        Log($"Failed to replace block at {block.Position}");
+                        MyAPIGateway.Utilities.ShowNotification($"Failed to replace block at {block.Position}", 5000, MyFontEnum.Red);
+                    }
+                });
+            }
+
+            if (blocksSuccessfullyReplaced > 0)
+            {
+                var serialized = MyAPIGateway.Utilities.SerializeToBinary(packet);
+                MyAPIGateway.Multiplayer.SendMessageToOthers(NetworkId, serialized);
             }
             return blocksSuccessfullyReplaced;
         }
@@ -190,16 +248,14 @@ namespace Munashe.BlockSwapper
             foreach ( var hit in hits )
             {
                 var grid = hit.HitEntity as IMyCubeGrid;
-                if (grid?.Physics != null)
+                if (grid?.Physics == null) continue;
+                if (Debug)
                 {
-                    if (Debug)
-                    {
-                        Color color = Color.GreenYellow;
-                        var refcolor = color.ToVector4();
-                        MyTransparentGeometry.AddPointBillboard(MyStringId.GetOrCompute("WhiteDot"), refcolor, hit.Position, 1f, 0f, -1, BlendTypeEnum.SDR, PersistBillboard);
-                    }
-                    return grid;
+                    var color = Color.GreenYellow;
+                    var refcolor = color.ToVector4();
+                    MyTransparentGeometry.AddPointBillboard(MyStringId.GetOrCompute("WhiteDot"), refcolor, hit.Position, 1f, 0f, -1, BlendTypeEnum.SDR, PersistBillboard);
                 }
+                return grid;
             }
             return null;
         }
@@ -208,15 +264,45 @@ namespace Munashe.BlockSwapper
         {
             try
             {
-                Replacement r = MyAPIGateway.Utilities.SerializeFromBinary<Replacement>(serialized);
-                var grid = MyAPIGateway.Entities.GetEntityById(r.EntityId) as IMyCubeGrid;
-                if (grid != null)
+                var packet = MyAPIGateway.Utilities.SerializeFromBinary<Packet>(serialized);
+                if (packet != null)
                 {
-                    DoBlockReplacement(grid, r.TargetSubtype, r.ReplacementSubtype);
+                    var grid = MyAPIGateway.Entities.GetEntityById(packet.EntityId) as IMyCubeGrid;
+                    if (grid == null)
+                    {
+                        Log("grid must be non-null");
+                        return;
+                    }
+                    if (isSenderServer && packet.Orders != null)
+                    {
+                        foreach (var order in packet.Orders)
+                        {
+                            var ob = MyObjectBuilderSerializer.CreateNewObject(order.Id);
+                            if (!(ob is MyObjectBuilder_CubeBlock))
+                            {
+                                Log($"Failed to CreateNewObject({order.Id})");
+                                continue;
+                            }
+                            var block = grid.AddBlock(ob as MyObjectBuilder_CubeBlock, false);
+                            if (block == null)
+                            {
+                                Log($"grid.AddBlock failure @ {order.Position}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (packet.Orders != null)
+                        {
+                            Log("Server received packet with non-null Orders");
+                            return;
+                        }
+                        DoBlockReplacementServer(packet);
+                    }
                 }
                 else
                 {
-                    Log($"Server could not find IMyCubeGrid entity with matching entityId {r.EntityId}");
+                    Log("Server received invalid packet");
                 }
             }
             catch (Exception ex)
@@ -224,17 +310,39 @@ namespace Munashe.BlockSwapper
                 Log(ex.ToString());
             }
         }
+
+        
     }
 
     [ProtoContract]
-    internal class Replacement
+    internal class Order
+    {
+        [ProtoMember(1)] public MyDefinitionId Id;
+        [ProtoMember(2)] public MyBlockOrientation Orientation;
+        [ProtoMember(3)] public Vector3I Position;
+        [ProtoMember(4)] public Vector3 Paint;
+
+        private Order() {}
+
+        public Order(IMySlimBlock block)
+        {
+            Id = block.BlockDefinition.Id;
+            Orientation = block.Orientation;
+            Position = block.Position;
+            Paint = block.GetColorMask();
+        }
+    }
+
+    [ProtoContract]
+    internal class Packet
     {
         [ProtoMember(1)] public long EntityId;
         [ProtoMember(2)] public string TargetSubtype;
         [ProtoMember(3)] public string ReplacementSubtype;
+        [ProtoMember(4)] public List<Order> Orders;
 
-        private Replacement() {}
-        public Replacement(long entityId, string targetSubtype, string replacementSubtype)
+        private Packet() {}
+        public Packet(long entityId, string targetSubtype, string replacementSubtype)
         {
             EntityId = entityId;
             TargetSubtype = targetSubtype;

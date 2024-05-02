@@ -111,7 +111,15 @@ namespace Munashe.BlockSwapper
                 return;
             }
 
-            
+            // TODO: DoBlockReplacement is not properly synced, so the player only sees the change done by
+            //       the server after reconnecting. RazeBlocks seems to be synced, so the player immediately
+            //       sees the blocks be destroyed. I can't just run a DoBlockReplacement on server and client
+            //       simultaneously, because RazeBlocks is synced. They end up trampling over each-other.
+  
+            // Consider manually checking the bounding box of the replacement block against the grid instead
+            // of using the "trick" of deleting and trying to place the new block. This also leads into
+            // adjusting the position of the new block relative to the bounds of the old block.
+
             if (!MyAPIGateway.Session.IsServer)
             {
                 var replacement = new Replacement(grid.EntityId, targetSubtype, replacementSubtype);
@@ -143,7 +151,7 @@ namespace Munashe.BlockSwapper
                     var replacementBuilder = block.GetObjectBuilder(true);
                     replacementBuilder.SubtypeName = replacement;
                     grid?.RazeBlock(block.Position);
-
+                    
                     // TODO: (munashe) Prevent block from dumping inventory into world on removal
                     MyAPIGateway.Utilities.InvokeOnGameThread(() => {
                         var blockAdded = grid?.AddBlock(replacementBuilder, false);
@@ -162,7 +170,7 @@ namespace Munashe.BlockSwapper
                         }
                     });
 
-                    if (Debug && grid != null)
+                    if (!MyAPIGateway.Utilities.IsDedicated && Debug && grid != null)
                     {
                         Color color = Color.Yellow;
                         var refcolor = color.ToVector4();
@@ -201,14 +209,14 @@ namespace Munashe.BlockSwapper
             try
             {
                 Replacement r = MyAPIGateway.Utilities.SerializeFromBinary<Replacement>(serialized);
-                var grid = MyAPIGateway.Entities.GetEntityById(r.entityId) as IMyCubeGrid;
+                var grid = MyAPIGateway.Entities.GetEntityById(r.EntityId) as IMyCubeGrid;
                 if (grid != null)
                 {
-                    DoBlockReplacement(grid, r.targetSubtype, r.replacementSubtype);
+                    DoBlockReplacement(grid, r.TargetSubtype, r.ReplacementSubtype);
                 }
                 else
                 {
-                    Log($"Server could not find IMyCubeGrid entity with matching entityId {r.entityId}");
+                    Log($"Server could not find IMyCubeGrid entity with matching entityId {r.EntityId}");
                 }
             }
             catch (Exception ex)
@@ -221,15 +229,16 @@ namespace Munashe.BlockSwapper
     [ProtoContract]
     internal class Replacement
     {
-        [ProtoMember(1)] public readonly long entityId;
-        [ProtoMember(2)] public readonly string targetSubtype;
-        [ProtoMember(3)] public readonly string replacementSubtype;
+        [ProtoMember(1)] public long EntityId;
+        [ProtoMember(2)] public string TargetSubtype;
+        [ProtoMember(3)] public string ReplacementSubtype;
 
+        private Replacement() {}
         public Replacement(long entityId, string targetSubtype, string replacementSubtype)
         {
-            this.entityId = entityId;
-            this.targetSubtype = targetSubtype;
-            this.replacementSubtype = replacementSubtype;
+            EntityId = entityId;
+            TargetSubtype = targetSubtype;
+            ReplacementSubtype = replacementSubtype;
         }
     }
 }

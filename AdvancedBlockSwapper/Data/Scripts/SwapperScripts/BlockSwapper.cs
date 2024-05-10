@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Windows.Input;
 using ProtoBuf;
 using Sandbox.Definitions;
 using Sandbox.Game.Entities;
@@ -30,6 +31,13 @@ namespace Munashe.BlockSwapper
 
         private List<MyBillboard> PersistBillboard = new List<MyBillboard>();
         private TextWriter logger;
+
+        private Dictionary<string, string> usageDictionary = new Dictionary<string, string>
+        {
+            ["help"] = "",
+            ["replace"] = "replace {targetSubtype} {replacementSubtype}",
+            ["delete"] = "delete {targetSubtype}",
+        };
 
         public void Log(string line)
         {
@@ -75,23 +83,8 @@ namespace Munashe.BlockSwapper
             Instance = null;
         }
 
-        private void HandleMessage(ulong sender, string messageText, ref bool sendToOthers)
+        private void PrepareReplace(IMyCubeGrid grid, string targetSubtype, string replacementSubtype)
         {
-            Log($"Received message: {messageText} from sender {sender}");
-            if (!messageText.StartsWith(commandPrefix)) { return; }
-            var infostring = $"sender {sender}: {messageText}";
-            Log(infostring);
-
-            sendToOthers = false;
-
-            var args = messageText.Substring(commandPrefix.Length).Split(' ');
-
-            if (args.Length != 3) { return; }
-
-            var command = args[0];
-            var targetSubtype = args[1];
-            var replacementSubtype = args[2];
-
             if (!validSubtypes.Contains(targetSubtype))
             {
                 MyAPIGateway.Utilities.ShowNotification($"unknown subtypeId '{targetSubtype}'");
@@ -105,17 +98,8 @@ namespace Munashe.BlockSwapper
                 return;
             }
 
-            infostring = $"command {command}, target {targetSubtype}, replacement {replacementSubtype}";
+            var infostring = $"command: replace, target {targetSubtype}, replacement {replacementSubtype}";
             Log(infostring);
-
-            var grid = RaycastGridFromCamera();
-            infostring = grid?.ToString() ?? "No grid hit by Raycast";
-            Log(infostring);
-            if (grid == null)
-            {
-                MyAPIGateway.Utilities.ShowNotification(infostring);
-                return;
-            }
 
             if (!MyAPIGateway.Session.IsServer)
             {
@@ -132,6 +116,80 @@ namespace Munashe.BlockSwapper
                 MyAPIGateway.Utilities.ShowNotification($"Replaced {result} blocks");
                 Log($"Replaced {result} blocks");
             }
+        }
+
+        private void HandleMessage(ulong sender, string messageText, ref bool sendToOthers)
+        {
+            Log($"Received message: {messageText} from sender {sender}");
+            if (!messageText.StartsWith(commandPrefix)) { return; }
+            var infostring = $"sender {sender}: {messageText}";
+            Log(infostring);
+
+            sendToOthers = false;
+
+            var args = messageText.Substring(commandPrefix.Length)
+                .Split(new []{' '}, StringSplitOptions.RemoveEmptyEntries);
+
+            if (args.Length < 1)
+            {
+                MyAPIGateway.Utilities.ShowMessage("BlockSwapper",$"No command provided");
+                args = new[] { "help" };
+            }
+            var command = args[0];
+
+            var grid = RaycastGridFromCamera();
+            infostring = grid?.ToString() ?? "No grid hit by Raycast";
+            Log(infostring);
+            if (grid == null)
+            {
+                MyAPIGateway.Utilities.ShowNotification(infostring);
+                return;
+            }
+
+            switch (command)
+            {
+                case "help":
+                    MyAPIGateway.Utilities.ShowMessage("BlockSwapper", $"Commands:");
+                    foreach (var key in usageDictionary.Keys)
+                    {
+                        if (key == "help") continue;
+                        MyAPIGateway.Utilities.ShowMessage("", $"\t{usageDictionary[key]}");
+                    }
+                    MyAPIGateway.Utilities.ShowMessage("BlockSwapper", $"Shortcuts: [r]eplace, [d]elete");
+                    break;
+                case "r":
+                case "replace":
+                    if (args.Length - 1 != 2)
+                    {
+                        MyAPIGateway.Utilities.ShowMessage("BlockSwapper", $"Usage:\n\t{commandPrefix} {usageDictionary["replace"]}");
+                        return;
+                    }
+                    PrepareReplace(grid, args[1], args[2]); break;
+                case "d":
+                case "delete":
+                    if (args.Length - 1 != 1)
+                    {
+                        MyAPIGateway.Utilities.ShowMessage("BlockSwapper", $"Usage:\n\t{commandPrefix} {usageDictionary["delete"]}");
+                        return;
+                    }
+                    var result = DeleteSubtype(grid, args[1]);
+                    MyAPIGateway.Utilities.ShowNotification($"BlockSwapper: deleted {result} block/s");
+                    break;
+                default:
+                    MyAPIGateway.Utilities.ShowMessage("BlockSwapper", $"Unrecognized command '{command}'");
+                    break;
+            }
+        }
+
+        private int DeleteSubtype(IMyCubeGrid grid, string targetSubtype)
+        {
+            if (grid == null) return 0;
+            var deleteCount = 0;
+            var blocks = new List<IMySlimBlock>();
+            grid.GetBlocks(blocks, block => block.BlockDefinition.Id.SubtypeId.ToString() == targetSubtype);
+            deleteCount = blocks.Count;
+            blocks.ForEach(block => grid.RazeBlock(block.Position));
+            return deleteCount;
         }
 
         private int DoBlockReplacement(IMyCubeGrid grid, string target, string replacement)

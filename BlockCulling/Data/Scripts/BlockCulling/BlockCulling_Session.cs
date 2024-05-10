@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Sandbox.Game.Entities.Cube;
+﻿using System.Collections.Generic;
 using Sandbox.ModAPI;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
@@ -46,11 +41,11 @@ namespace Scripts.BlockCulling
         public override void Draw()
         {
             _drawTicks++;
-            if (MyAPIGateway.Utilities.IsDedicated || _drawTicks % 15 != 0) // Only check every 1/4 second
+            if (MyAPIGateway.Utilities.IsDedicated || _drawTicks % 13 != 0) // Only check every 1/4 second
                 return;
 
             Vector3D cameraPosition = MyAPIGateway.Session?.Camera?.Position ?? Vector3D.MaxValue;
-            foreach (var grid in _culledBlocks.Keys)
+            foreach (var grid in _culledBlocks.Keys) // TODO uncomment
             {
                 // Recull blocks if within grid's WorldAABB
                 if (grid.WorldAABB.Contains(cameraPosition) != ContainmentType.Contains)
@@ -60,7 +55,7 @@ namespace Scripts.BlockCulling
                             block.Visible = false;
                     continue;
                 }
-
+            
                 // Set blocks to visible if not already done
                 if (!_unCulledGrids.Add(grid))
                     continue;
@@ -105,8 +100,7 @@ namespace Scripts.BlockCulling
                 IMySlimBlock slimNeighbor = slimBlock.CubeGrid.GetCubeBlock(blockPos);
                 if (slimNeighbor?.FatBlock != null)
                 {
-                    slimNeighbor.FatBlock.Visible = true;
-                    _culledBlocks[slimNeighbor.CubeGrid].Remove(slimNeighbor.FatBlock);
+                    SetTransparency(slimNeighbor, true, false);
                 }
             }
         }

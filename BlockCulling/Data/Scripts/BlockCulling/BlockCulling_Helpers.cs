@@ -54,24 +54,21 @@ namespace Scripts.BlockCulling
 
             foreach (var slimNeighbor in blockSlimNeighbors)
             {
-                if (IsBlockExposed(slimNeighbor) && !ConnectsWithFullMountPoint(slimBlock, slimNeighbor)) // If any neighbor block is exposed, check if this block is completely occluded.
-                    continue;
+                // Determine if block is surrounded on all sides
+                int surroundingBlockCount = 0;
+                foreach (Vector3I surfacePosition in GetSurfacePositions(slimNeighbor))
+                    if (slimNeighbor.CubeGrid.CubeExists(surfacePosition))
+                        surroundingBlockCount++;
+
+                // If block is exposed and block doesn't fully occlude this block, skip.
+                if (surroundingBlockCount != GetBlockFaceCount(slimNeighbor) && !ConnectsWithFullMountPoint(slimBlock, slimNeighbor)) // If any neighbor block is exposed, check if this block is completely occluded.
+                    return false;
 
                 if (slimNeighbor.FatBlock == null || !(slimNeighbor.FatBlock is IMyLightingBlock || slimNeighbor.BlockDefinition.Id.SubtypeName.Contains("Window"))) // Limit to slimblocks and fatblocks with physics (and not windows)
                     slimNeighborsContributor.Add(slimNeighbor);
             }
 
             return slimNeighborsContributor.Count == GetBlockFaceCount(block);
-        }
-
-        private bool IsBlockExposed(IMySlimBlock block)
-        {
-            int surroundingBlockCount = 0;
-            foreach (Vector3I surfacePosition in GetSurfacePositions(block))
-                if (block.CubeGrid.CubeExists(surfacePosition))
-                    surroundingBlockCount++;
-
-            return surroundingBlockCount != GetBlockFaceCount(block);
         }
 
         private bool ConnectsWithFullMountPoint(IMySlimBlock thisBlock, IMySlimBlock slimNeighbor)
@@ -119,18 +116,13 @@ namespace Scripts.BlockCulling
                         bool xLimit = (x == -1 || x == blockSize.X);
                         bool yLimit = (y == -1 || y == blockSize.Y);
                         bool zLimit = (z == -1 || z == blockSize.Z);
-                        if (TernaryXor(xLimit, yLimit, zLimit)) // Avoid checking positions inside the block.
+                        if ((!xLimit && yLimit ^ zLimit) || (xLimit && !(yLimit || zLimit))) // Avoid checking positions inside the block.
                             surfacePositions.Add(block.Min + new Vector3I(x, y, z));
                     }
                 }
             }
 
             return surfacePositions.ToArray();
-        }
-
-        public static bool TernaryXor(bool a, bool b, bool c)
-        {
-            return (!a && (b ^ c)) || (a && !(b || c));
         }
     }
 }

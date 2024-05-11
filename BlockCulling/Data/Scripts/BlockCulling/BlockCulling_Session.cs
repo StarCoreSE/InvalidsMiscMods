@@ -15,9 +15,16 @@ namespace Scripts.BlockCulling
         /// </summary>
         private readonly Dictionary<IMyCubeGrid, HashSet<IMyCubeBlock>> _culledBlocks = new Dictionary<IMyCubeGrid, HashSet<IMyCubeBlock>>();
         /// <summary>
-        /// Map of all temporarily unculled grids, set by distance.
+        /// List of all temporarily un-culled grids, set by distance.
         /// </summary>
         private readonly HashSet<IMyCubeGrid> _unCulledGrids = new HashSet<IMyCubeGrid>();
+
+        /// <summary>
+        /// Making blocks invisible is expensive; this spreads it over several ticks.
+        /// </summary>
+        private readonly List<IMyCubeBlock> _queuedBlockCulls = new List<IMyCubeBlock>();
+
+        private const int MaxBlocksCulledPerTick = 100;
 
         #region Base Methods
 
@@ -38,21 +45,33 @@ namespace Scripts.BlockCulling
         }
 
         private int _drawTicks;
+        private Vector3D _cameraPosition;
         public override void Draw()
         {
-            _drawTicks++;
-            if (MyAPIGateway.Utilities.IsDedicated || _drawTicks % 13 != 0) // Only check every 1/4 second
-                return;
-
-            Vector3D cameraPosition = MyAPIGateway.Session?.Camera?.Position ?? Vector3D.MaxValue;
-            foreach (var grid in _culledBlocks.Keys) // TODO uncomment
+            // Making blocks invisible is expensive; this spreads it over several ticks.
+            if (_queuedBlockCulls.Count > 0)
             {
-                // Recull blocks if within grid's WorldAABB
-                if (grid.WorldAABB.Contains(cameraPosition) != ContainmentType.Contains)
+                int i = 0;
+                for (; i < _queuedBlockCulls.Count && i < MaxBlocksCulledPerTick; i++)
+                {
+                    _queuedBlockCulls[i].Visible = false;
+                }
+                _queuedBlockCulls.RemoveRange(0, i);
+            }
+
+            _drawTicks++;
+            if (MyAPIGateway.Utilities.IsDedicated || _drawTicks < 13) // Only check every 1/4 second
+                return;
+            _drawTicks = 0;
+
+            _cameraPosition = MyAPIGateway.Session?.Camera?.Position ?? Vector3D.MaxValue;
+            foreach (var grid in _culledBlocks.Keys)
+            {
+                // Re-cull blocks if within grid's WorldAABB
+                if (grid.WorldAABB.Contains(_cameraPosition) != ContainmentType.Contains)
                 {
                     if (_unCulledGrids.Remove(grid))
-                        foreach (var block in _culledBlocks[grid])
-                            block.Visible = false;
+                        _queuedBlockCulls.AddRange(_culledBlocks[grid]);
                     continue;
                 }
             
@@ -76,11 +95,7 @@ namespace Scripts.BlockCulling
 
             grid.OnBlockAdded += OnBlockPlace;
             grid.OnBlockRemoved += OnBlockRemove;
-            grid.OnClose += gridEntity =>
-            {
-                _culledBlocks.Remove(grid);
-                _unCulledGrids.Remove(grid);
-            };
+            grid.OnClose += OnGridRemove;
 
             _culledBlocks.Add(grid, new HashSet<IMyCubeBlock>());
 
@@ -103,6 +118,12 @@ namespace Scripts.BlockCulling
                     SetTransparency(slimNeighbor, true, false);
                 }
             }
+        }
+
+        private void OnGridRemove(IMyEntity gridEntity)
+        {
+            _culledBlocks.Remove((IMyCubeGrid) gridEntity);
+            _unCulledGrids.Remove((IMyCubeGrid) gridEntity);
         }
 
         #endregion

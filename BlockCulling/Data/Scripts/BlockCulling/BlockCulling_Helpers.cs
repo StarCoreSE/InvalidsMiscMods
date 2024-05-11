@@ -49,8 +49,7 @@ namespace Scripts.BlockCulling
             IMyCubeBlock block = slimBlock?.FatBlock;
             if (block == null) return false;
 
-            List<IMySlimBlock> slimNeighborsContributor = blockSlimNeighbors.ToList();
-            blockSlimNeighbors.Clear();
+            List<IMySlimBlock> slimNeighborsContributor = new List<IMySlimBlock>();
 
             foreach (var slimNeighbor in blockSlimNeighbors)
             {
@@ -101,10 +100,16 @@ namespace Scripts.BlockCulling
             return 2 * (blockSize.X * blockSize.Y + blockSize.Y * blockSize.Z + blockSize.Z * blockSize.X);
         }
 
+        private Vector3I[] _surfacePositions = new Vector3I[6];
         private Vector3I[] GetSurfacePositions(IMySlimBlock block)
         {
-            List<Vector3I> surfacePositions = new List<Vector3I>();
             Vector3I blockSize = Vector3I.Abs(block.Max - block.Min) + Vector3I.One;
+
+            int faceCount = 2 * (blockSize.X * blockSize.Y + blockSize.Y * blockSize.Z + blockSize.Z * blockSize.X);
+            if (_surfacePositions.Length != faceCount)
+                _surfacePositions = new Vector3I[faceCount];
+
+            int idx = 0;
 
             for (int x = -1; x <= blockSize.X; x++)
             {
@@ -117,12 +122,12 @@ namespace Scripts.BlockCulling
                         bool yLimit = (y == -1 || y == blockSize.Y);
                         bool zLimit = (z == -1 || z == blockSize.Z);
                         if ((!xLimit && yLimit ^ zLimit) || (xLimit && !(yLimit || zLimit))) // Avoid checking positions inside the block.
-                            surfacePositions.Add(block.Min + new Vector3I(x, y, z));
+                            _surfacePositions[idx++] = block.Min + new Vector3I(x, y, z);
                     }
                 }
             }
 
-            return surfacePositions.ToArray();
+            return _surfacePositions;
         }
     }
 }

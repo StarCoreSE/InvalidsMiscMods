@@ -112,21 +112,13 @@ namespace Scripts.BlockCulling
 
         private void OnBlockRemove(IMySlimBlock slimBlock)
         {
-            try
+            foreach (var blockPos in GetSurfacePositions(slimBlock))
             {
-                foreach (var blockPos in GetSurfacePositions(slimBlock))
+                IMySlimBlock slimNeighbor = slimBlock.CubeGrid.GetCubeBlock(blockPos);
+                if (slimNeighbor?.FatBlock != null)
                 {
-                    IMySlimBlock slimNeighbor = slimBlock.CubeGrid.GetCubeBlock(blockPos);
-                    if (slimNeighbor?.FatBlock != null)
-                    {
-                        SetTransparency(slimNeighbor, true, false);
-                    }
+                    SetTransparency(slimNeighbor, true, false);
                 }
-            }
-            catch (Exception ex)
-            {
-                MyLog.Default.WriteLineAndConsole(ex.ToString());
-                MyAPIGateway.Utilities.ShowNotification("Exception occured in BlockCulling_Session.OnBlockRemoved! Check game log for details.");
             }
         }
 

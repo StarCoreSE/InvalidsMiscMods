@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Sandbox.ModAPI;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
+using VRage.Utils;
 using VRageMath;
 
 namespace Scripts.BlockCulling
@@ -110,13 +112,21 @@ namespace Scripts.BlockCulling
 
         private void OnBlockRemove(IMySlimBlock slimBlock)
         {
-            foreach (var blockPos in GetSurfacePositions(slimBlock))
+            try
             {
-                IMySlimBlock slimNeighbor = slimBlock.CubeGrid.GetCubeBlock(blockPos);
-                if (slimNeighbor?.FatBlock != null)
+                foreach (var blockPos in GetSurfacePositions(slimBlock))
                 {
-                    SetTransparency(slimNeighbor, true, false);
+                    IMySlimBlock slimNeighbor = slimBlock.CubeGrid.GetCubeBlock(blockPos);
+                    if (slimNeighbor?.FatBlock != null)
+                    {
+                        SetTransparency(slimNeighbor, true, false);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                MyLog.Default.WriteLineAndConsole(ex.ToString());
+                MyAPIGateway.Utilities.ShowNotification("Exception occured in BlockCulling_Session.OnBlockRemoved! Check game log for details.");
             }
         }
 

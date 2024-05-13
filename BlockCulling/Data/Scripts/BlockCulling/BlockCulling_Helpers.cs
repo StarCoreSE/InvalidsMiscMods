@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using Sandbox.Definitions;
 using Sandbox.ModAPI;
 using VRage.Game.ModAPI;
+using VRage.Utils;
 using VRageMath;
 
 namespace Scripts.BlockCulling
@@ -11,28 +13,36 @@ namespace Scripts.BlockCulling
     {
         private void SetTransparency(IMySlimBlock slimBlock, bool recursive = true, bool deepRecurse = true)
         {
-            IMyCubeBlock block = slimBlock.FatBlock;
-            if (!recursive && block == null) // Don't do a non-recursive scan on slimblocks
-                return; // No logic would run so just return early
-
-            var blockSlimNeighbors = new List<IMySlimBlock>();
-            bool shouldCullBlock = BlockEligibleForCulling(slimBlock, ref blockSlimNeighbors);
-
-            // Add to cache for making blocks invisible when inside grid's WorldAABB
-            if (block != null) // Only set fatblock visiblity to false
+            try
             {
-                if (!_unCulledGrids.Contains(block.CubeGrid)) // Only set blocks to be invisible if grid is being culled
-                    block.Visible = !shouldCullBlock;
+                IMyCubeBlock block = slimBlock.FatBlock;
+                if (!recursive && block == null) // Don't do a non-recursive scan on slimblocks
+                    return; // No logic would run so just return early
 
-                if (shouldCullBlock)
-                    _culledBlocks[block.CubeGrid].Add(block);
-                else
-                    _culledBlocks[block.CubeGrid].Remove(block);
+                var blockSlimNeighbors = new List<IMySlimBlock>();
+                bool shouldCullBlock = BlockEligibleForCulling(slimBlock, ref blockSlimNeighbors);
+
+                // Add to cache for making blocks invisible when inside grid's WorldAABB
+                if (block?.CubeGrid != null) // Only set fatblock visiblity to false
+                {
+                    if (!_unCulledGrids.Contains(block
+                            .CubeGrid)) // Only set blocks to be invisible if grid is being culled
+                        block.Visible = !shouldCullBlock;
+
+                    if (shouldCullBlock)
+                        _culledBlocks[block.CubeGrid].Add(block);
+                    else
+                        _culledBlocks[block.CubeGrid].Remove(block);
+                }
+
+                if (recursive) // Do set nearby blocks visibility to false.
+                    foreach (var slimBlockN in blockSlimNeighbors)
+                        SetTransparency(slimBlockN, deepRecurse, false);
             }
-
-            if (recursive) // Do set nearby blocks visibility to false.
-                foreach (var slimBlockN in blockSlimNeighbors)
-                    SetTransparency(slimBlockN, deepRecurse, false);
+            catch (Exception ex)
+            {
+                MyLog.Default.WriteLineAndConsole("Exception in BlockCulling: " + ex);
+            }
         }
 
         private bool BlockEligibleForCulling(IMySlimBlock slimBlock, ref List<IMySlimBlock> blockSlimNeighbors)

@@ -19,7 +19,7 @@ namespace Scripts.BlockCulling
                 if (!recursive && block == null) // Don't do a non-recursive scan on slimblocks
                     return; // No logic would run so just return early
 
-                var blockSlimNeighbors = new List<IMySlimBlock>();
+                var blockSlimNeighbors = new HashSet<IMySlimBlock>();
                 bool shouldCullBlock = BlockEligibleForCulling(slimBlock, ref blockSlimNeighbors);
 
                 // Add to cache for making blocks invisible when inside grid's WorldAABB
@@ -45,10 +45,10 @@ namespace Scripts.BlockCulling
             }
         }
 
-        private bool BlockEligibleForCulling(IMySlimBlock slimBlock, ref List<IMySlimBlock> blockSlimNeighbors)
+        private bool BlockEligibleForCulling(IMySlimBlock slimBlock, ref HashSet<IMySlimBlock> blockSlimNeighbors)
         {
             if (blockSlimNeighbors == null)
-                blockSlimNeighbors = new List<IMySlimBlock>();
+                blockSlimNeighbors = new HashSet<IMySlimBlock>();
             foreach (var blockPos in GetSurfacePositions(slimBlock))
             {
                 IMySlimBlock neighbor = slimBlock.CubeGrid.GetCubeBlock(blockPos);

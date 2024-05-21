@@ -58,8 +58,9 @@ namespace Scripts.ModularAssemblies
             // All SubtypeIds that can be part of this assembly.
             AllowedBlockSubtypes = new[]
             {
-                "LargeBlockBatteryBlock",
-                "LargeBlockSmallGenerator",
+                "EPR_Generator",
+                "EPR_Injector",
+                "EPR_Conduit",
             },
 
             // Allowed connection directions & whitelists, measured in blocks.
@@ -67,10 +68,23 @@ namespace Scripts.ModularAssemblies
             // If the connection type whitelist is empty, all allowed subtypes may connect on that side.
             AllowedConnections = new Dictionary<string, Dictionary<Vector3I, string[]>>
             {
-                ["LargeBlockSmallGenerator"] = new Dictionary<Vector3I, string[]>
+                ["EPR_Generator"] = new Dictionary<Vector3I, string[]>
                 {
                     // In this definition, a small reactor can only connect on faces with conveyors.
-                    [Vector3I.Up] = Array.Empty<string>(), // Build Info is really handy for checking directions.
+                    [Vector3I.Forward] = Array.Empty<string>(), // Build Info is really handy for checking directions.
+                    [Vector3I.Backward] = Array.Empty<string>(),
+                    [Vector3I.Left] = Array.Empty<string>(),
+                    [Vector3I.Right] = Array.Empty<string>(),
+                },
+                ["EPR_Injector"] = new Dictionary<Vector3I, string[]>
+                {
+                    // In this definition, a small reactor can only connect on faces with conveyors.
+                    [Vector3I.Forward] = Array.Empty<string>(), // Build Info is really handy for checking directions.
+                },
+                ["EPR_Conduit"] = new Dictionary<Vector3I, string[]>
+                {
+                    // In this definition, a small reactor can only connect on faces with conveyors.
+                    [Vector3I.Forward] = Array.Empty<string>(), // Build Info is really handy for checking directions.
                     [Vector3I.Backward] = Array.Empty<string>(),
                 }
             },

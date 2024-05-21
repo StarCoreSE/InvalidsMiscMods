@@ -6,8 +6,8 @@
 				<TypeId>CubeBlock</TypeId>
 				<SubtypeId>EPR_Conduit</SubtypeId>
 			</Id>
-			<DisplayName>{LOC:DisplayName_EPR_Conduit}</DisplayName>
-			<Description>{LOC:Description_EPR_Conduit}</Description>
+			<DisplayName>EPR Conduit</DisplayName>
+			<Description>EPR Conduit</Description>
 			<Icon>Textures\GUI\Icons\AstronautBackpack.dds</Icon>
 			<CubeSize>Large</CubeSize>
 			<BlockTopology>TriangleMesh</BlockTopology>

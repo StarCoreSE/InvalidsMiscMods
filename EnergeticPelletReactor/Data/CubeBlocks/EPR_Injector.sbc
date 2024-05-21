@@ -6,8 +6,8 @@
 				<TypeId>Collector</TypeId>
 				<SubtypeId>EPR_Injector</SubtypeId>
 			</Id>
-			<DisplayName>{LOC:DisplayName_EPR_Injector}</DisplayName>
-			<Description>{LOC:Description_EPR_Injector}</Description>
+			<DisplayName>EPR Injector</DisplayName>
+			<Description>EPR Injector</Description>
 			<Icon>Textures\GUI\Icons\AstronautBackpack.dds</Icon>
 			<CubeSize>Large</CubeSize>
 			<BlockTopology>TriangleMesh</BlockTopology>

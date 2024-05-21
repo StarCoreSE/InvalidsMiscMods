@@ -27,6 +27,7 @@ namespace Scripts.ModularAssemblies
             OnInit = () =>
             {
                 MyAPIGateway.Utilities.ShowMessage("Modular Assemblies", "EPR_Definition.OnInit called.");
+                EPRTerminalControls.CreateControlsOnce(); // Initialize terminal controls here
             },
 
             // Triggers whenever a new part is added to an assembly.

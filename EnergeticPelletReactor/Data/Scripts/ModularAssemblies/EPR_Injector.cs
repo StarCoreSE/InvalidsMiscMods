@@ -1,12 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace YourName.ModName.Data.Scripts.EPR
+namespace Scripts.ModularAssemblies
 {
-    internal class EPR_Generator
+    internal class EPR_Injector
     {
     }
 }

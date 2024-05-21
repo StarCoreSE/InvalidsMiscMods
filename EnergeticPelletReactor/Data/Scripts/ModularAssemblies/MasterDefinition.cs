@@ -7,7 +7,7 @@
         {
             // it's just like assemblycore, insert definitions here
 
-            LoadDefinitions(ExampleDefinition);
+            LoadDefinitions(EPR_Definition);
         }
     }
 }

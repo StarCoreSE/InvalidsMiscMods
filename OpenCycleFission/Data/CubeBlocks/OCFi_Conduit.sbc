@@ -13,12 +13,12 @@
 			<BlockTopology>TriangleMesh</BlockTopology>
 			<Size x="1" y="1" z="1"/>
 			<ModelOffset x="0" y="0" z="0"/>
-			<Model>Models\EPR_Conduit.mwm</Model>
+			<Model>Models\OCFi_Conduit.mwm</Model>
 			<Components>
 				<Component Subtype="SteelPlate" Count="10"/>
 			</Components>
 			<CriticalComponent Subtype="SteelPlate" Index="0"/>
-			<BlockPairName>EPR_Conduit</BlockPairName>
+			<BlockPairName>OCFi_Conduit</BlockPairName>
 		</Definition>
 	</CubeBlocks>
 </Definitions>

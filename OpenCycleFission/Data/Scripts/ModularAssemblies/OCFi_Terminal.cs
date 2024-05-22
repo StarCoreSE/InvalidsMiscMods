@@ -7,7 +7,7 @@ namespace Scripts.ModularAssemblies
 {
     public static class EPRTerminalControls
     {
-        private const string IdPrefix = "YourMod_";
+        private const string IdPrefix = "OCFi_";
         private static bool controlsCreated = false;
 
         public static void CreateControlsOnce()
@@ -28,7 +28,7 @@ namespace Scripts.ModularAssemblies
 
         private static void GeneratorCustomControlGetter(IMyTerminalBlock block, List<IMyTerminalControl> controls)
         {
-            if (block?.BlockDefinition.SubtypeId == "EPR_Generator" && !ControlsAlreadyAdded(controls))
+            if (block?.BlockDefinition.SubtypeId == "OCFi_Reactor" && !ControlsAlreadyAdded(controls))
             {
                 var button1 = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyBatteryBlock>(IdPrefix + "Button1");
                 button1.Title = MyStringId.GetOrCompute("Button 1");
@@ -57,7 +57,7 @@ namespace Scripts.ModularAssemblies
 
         private static void InjectorCustomControlGetter(IMyTerminalBlock block, List<IMyTerminalControl> controls)
         {
-            if (block?.BlockDefinition.SubtypeId == "EPR_Injector" && !ControlsAlreadyAdded(controls))
+            if (block?.BlockDefinition.SubtypeId == "OCFi_Nozzle" && !ControlsAlreadyAdded(controls))
             {
                 var button = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyCollector>(IdPrefix + "Button");
                 button.Title = MyStringId.GetOrCompute("Inject");

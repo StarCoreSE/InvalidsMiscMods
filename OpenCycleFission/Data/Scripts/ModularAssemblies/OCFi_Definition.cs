@@ -66,12 +66,12 @@ namespace Scripts.ModularAssemblies
             {
                 ["OCFi_Reactor"] = new Dictionary<Vector3I, string[]>
                 {
-                    [Vector3I.Forward] = Array.Empty<string>(),
-                    [Vector3I.Backward] = Array.Empty<string>(),
-                    [Vector3I.Left] = Array.Empty<string>(),
-                    [Vector3I.Right] = Array.Empty<string>(),
-                    [Vector3I.Up] = Array.Empty<string>(),
-                    [Vector3I.Down] = Array.Empty<string>(),
+                    [Vector3I.Forward * 2] = Array.Empty<string>(),
+                    [Vector3I.Backward * 2] = Array.Empty<string>(),
+                    [Vector3I.Left * 2] = Array.Empty<string>(),
+                    [Vector3I.Right * 2] = Array.Empty<string>(),
+                    [Vector3I.Up * 2] = Array.Empty<string>(),
+                    [Vector3I.Down * 2] = Array.Empty<string>(),
                 },
                 ["OCFi_Nozzle"] = new Dictionary<Vector3I, string[]>
                 {

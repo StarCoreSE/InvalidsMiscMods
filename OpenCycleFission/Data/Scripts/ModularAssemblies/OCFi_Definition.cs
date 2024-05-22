@@ -79,7 +79,7 @@ namespace Scripts.ModularAssemblies
                 },
                 ["OCFi_Nozzle"] = new Dictionary<Vector3I, string[]>
                 {
-                    [Vector3I.Forward] = Array.Empty<string>(),
+                    [Vector3I.Backward] = Array.Empty<string>(),
                 },
                 ["OCFi_Conduit"] = new Dictionary<Vector3I, string[]>
                 {

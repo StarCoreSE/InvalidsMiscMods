@@ -45,8 +45,18 @@ namespace Scripts.ModularAssemblies
             if (temperature < maxTemperature)
             {
                 temperature += temperatureIncrement;
-                MyAPIGateway.Utilities.ShowNotification($"Reactor {PhysicalAssemblyId} temperature increased to {temperature} K", 1000 / 60);
             }
+        }
+
+        public bool ConsumeHeat(float amount)
+        {
+            if (temperature >= amount)
+            {
+                temperature -= amount;
+                MyAPIGateway.Utilities.ShowNotification($"Heat consumed: {amount} K, remaining: {temperature} K", 1000 / 60);
+                return true;
+            }
+            return false;
         }
 
         private void ShowTemperatureNotification()

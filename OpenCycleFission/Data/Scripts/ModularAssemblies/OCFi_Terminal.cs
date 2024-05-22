@@ -59,7 +59,7 @@ namespace Scripts.ModularAssemblies
         {
             if (block?.BlockDefinition.SubtypeId == "OCFi_Nozzle" && !ControlsAlreadyAdded(controls))
             {
-                var button = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyCollector>(IdPrefix + "Button");
+                var button = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyThrust>(IdPrefix + "Button");
                 button.Title = MyStringId.GetOrCompute("Inject");
                 button.Tooltip = MyStringId.GetOrCompute("Perform the injection action");
                 button.Action = b => MyAPIGateway.Utilities.ShowNotification("Injector Button pressed", 2000);

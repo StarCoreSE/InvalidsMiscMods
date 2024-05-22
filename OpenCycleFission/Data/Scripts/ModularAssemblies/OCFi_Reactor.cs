@@ -6,7 +6,6 @@ using VRage.Utils;
 
 namespace Scripts.ModularAssemblies
 {
-    [MySessionComponentDescriptor(MyUpdateOrder.AfterSimulation)]
     public class OCFi_ReactorLogic : MySessionComponentBase
     {
         public int PhysicalAssemblyId { get; private set; }

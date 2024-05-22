@@ -2,6 +2,7 @@
 using Sandbox.ModAPI.Interfaces.Terminal;
 using VRage.Utils;
 using System.Collections.Generic;
+using System;
 
 namespace Scripts.ModularAssemblies
 {
@@ -9,6 +10,9 @@ namespace Scripts.ModularAssemblies
     {
         private const string IdPrefix = "OCFi_";
         private static bool controlsCreated = false;
+
+        public static readonly Guid SettingsGUID = new Guid("f5d9a80f-228c-4f28-b1a5-a6e2eceeda4e");
+
 
         public static void CreateControlsOnce()
         {

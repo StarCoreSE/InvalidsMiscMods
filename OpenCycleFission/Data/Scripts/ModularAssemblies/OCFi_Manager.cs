@@ -26,6 +26,7 @@ namespace Scripts.ModularAssemblies
         protected override void UnloadData()
         {
             I = null;
+            ModularApi.UnloadData();
             MyAPIGateway.Utilities.ShowNotification("OCFiManager unloaded", 1000 / 60);
         }
 

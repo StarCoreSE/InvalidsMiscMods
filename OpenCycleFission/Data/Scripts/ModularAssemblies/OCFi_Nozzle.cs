@@ -5,6 +5,7 @@ using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using System.Collections.Generic;
 using VRage.Game.ModAPI;
+using Scripts.ModularAssemblies.Communication;
 
 namespace Scripts.ModularAssemblies
 {
@@ -12,6 +13,7 @@ namespace Scripts.ModularAssemblies
     public class OCFi_NozzleLogic : MyGameLogicComponent
     {
         private IMyThrust _nozzle;
+        private int _assemblyId;
         private OCFi_ReactorLogic _reactor;
         private float heatConsumption = 1000f; // Heat consumed per tick
         private bool isFiring = false;
@@ -22,7 +24,9 @@ namespace Scripts.ModularAssemblies
             _nozzle = (IMyThrust)Entity;
             NeedsUpdate |= MyEntityUpdateEnum.EACH_FRAME;
             MyAPIGateway.Utilities.ShowNotification($"OCFi Nozzle Initialized: {_nozzle.CustomName}", 1000 / 60);
-            FindReactor();
+            MyAPIGateway.Utilities.ShowNotification($"OCFi Nozzle Grid: {_nozzle.CubeGrid.DisplayName}", 1000 / 60);
+
+            FindAssembly();
         }
 
         public override void UpdateAfterSimulation()
@@ -51,22 +55,50 @@ namespace Scripts.ModularAssemblies
             }
         }
 
+        private void FindAssembly()
+        {
+            ModularDefinitionApi modularApi = OCFiManager.I?.ModularApi;
+            if (modularApi == null)
+            {
+                MyAPIGateway.Utilities.ShowNotification("Modular API not ready.", 1000 / 60);
+                return;
+            }
+
+            _assemblyId = modularApi.GetContainingAssembly(_nozzle, "OCFi_Nozzle");
+            if (_assemblyId != -1)
+            {
+                MyAPIGateway.Utilities.ShowNotification($"Assembly found: {_assemblyId}", 1000 / 60);
+                FindReactor();
+            }
+            else
+            {
+                MyAPIGateway.Utilities.ShowNotification("No assembly found for nozzle.", 1000 / 60);
+            }
+        }
+
         private void FindReactor()
         {
             MyAPIGateway.Utilities.ShowNotification("Finding reactor for nozzle...", 1000 / 60);
-            var grid = _nozzle.CubeGrid;
-            var reactors = new List<IMySlimBlock>();
-            grid.GetBlocks(reactors, block => block.FatBlock is IMyReactor);
-
-            foreach (var reactor in reactors)
+            ModularDefinitionApi modularApi = OCFiManager.I?.ModularApi;
+            if (modularApi == null)
             {
-                MyAPIGateway.Utilities.ShowNotification($"Checking reactor: {reactor.FatBlock.DisplayNameText}", 1000 / 60);
-                var reactorLogic = reactor.FatBlock.GameLogic.GetAs<OCFi_ReactorLogic>();
-                if (reactorLogic != null)
+                MyAPIGateway.Utilities.ShowNotification("Modular API not ready.", 1000 / 60);
+                return;
+            }
+
+            var parts = modularApi.GetMemberParts(_assemblyId);
+            foreach (var part in parts)
+            {
+                var reactor = part as IMyReactor;
+                if (reactor != null)
                 {
-                    _reactor = reactorLogic;
-                    MyAPIGateway.Utilities.ShowNotification("Reactor found for nozzle", 1000 / 60);
-                    return;
+                    var reactorLogic = reactor.GameLogic.GetAs<OCFi_ReactorLogic>();
+                    if (reactorLogic != null)
+                    {
+                        _reactor = reactorLogic;
+                        MyAPIGateway.Utilities.ShowNotification("Reactor found for nozzle", 1000 / 60);
+                        return;
+                    }
                 }
             }
 

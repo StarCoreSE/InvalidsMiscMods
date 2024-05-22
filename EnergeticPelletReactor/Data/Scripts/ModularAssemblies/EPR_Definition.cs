@@ -71,21 +71,18 @@ namespace Scripts.ModularAssemblies
             {
                 ["EPR_Generator"] = new Dictionary<Vector3I, string[]>
                 {
-                    // In this definition, a small reactor can only connect on faces with conveyors.
-                    [Vector3I.Forward] = Array.Empty<string>(), // Build Info is really handy for checking directions.
+                    [Vector3I.Forward] = Array.Empty<string>(),
                     [Vector3I.Backward] = Array.Empty<string>(),
                     [Vector3I.Left] = Array.Empty<string>(),
                     [Vector3I.Right] = Array.Empty<string>(),
                 },
                 ["EPR_Injector"] = new Dictionary<Vector3I, string[]>
                 {
-                    // In this definition, a small reactor can only connect on faces with conveyors.
-                    [Vector3I.Forward] = Array.Empty<string>(), // Build Info is really handy for checking directions.
+                    [Vector3I.Forward] = Array.Empty<string>(), 
                 },
                 ["EPR_Conduit"] = new Dictionary<Vector3I, string[]>
                 {
-                    // In this definition, a small reactor can only connect on faces with conveyors.
-                    [Vector3I.Forward] = Array.Empty<string>(), // Build Info is really handy for checking directions.
+                    [Vector3I.Forward] = Array.Empty<string>(),
                     [Vector3I.Backward] = Array.Empty<string>(),
                 }
             },

@@ -30,19 +30,19 @@ namespace Scripts.ModularAssemblies
         {
             if (block?.BlockDefinition.SubtypeId == "OCFi_Reactor" && !ControlsAlreadyAdded(controls))
             {
-                var button1 = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyBatteryBlock>(IdPrefix + "Button1");
+                var button1 = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyReactor>(IdPrefix + "Button1");
                 button1.Title = MyStringId.GetOrCompute("Button 1");
                 button1.Tooltip = MyStringId.GetOrCompute("This is button 1");
                 button1.Action = b => MyAPIGateway.Utilities.ShowNotification("Button 1 pressed", 2000);
                 controls.Add(button1);
 
-                var button2 = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyBatteryBlock>(IdPrefix + "Button2");
+                var button2 = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyReactor>(IdPrefix + "Button2");
                 button2.Title = MyStringId.GetOrCompute("Button 2");
                 button2.Tooltip = MyStringId.GetOrCompute("This is button 2");
                 button2.Action = b => MyAPIGateway.Utilities.ShowNotification("Button 2 pressed", 2000);
                 controls.Add(button2);
 
-                var button3 = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyBatteryBlock>(IdPrefix + "Button3");
+                var button3 = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyReactor>(IdPrefix + "Button3");
                 button3.Title = MyStringId.GetOrCompute("Button 3");
                 button3.Tooltip = MyStringId.GetOrCompute("This is button 3");
                 button3.Action = b => MyAPIGateway.Utilities.ShowNotification("Button 3 pressed", 2000);

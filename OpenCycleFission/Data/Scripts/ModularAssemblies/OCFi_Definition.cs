@@ -15,10 +15,6 @@ namespace Scripts.ModularAssemblies
      */
     internal partial class ModularDefinition
     {
-        // You can declare functions in here, and they are shared between all other ModularDefinition files.
-        // However, for all but the simplest of assemblies it would be wise to have a separate utilities class.
-
-        // This is the important bit.
         internal ModularPhysicalDefinition OCFi_Definition => new ModularPhysicalDefinition
         {
             // Unique name of the definition.
@@ -53,16 +49,15 @@ namespace Scripts.ModularAssemblies
             },
 
             // Optional - if this is set, an assembly will not be created until a baseblock exists.
-            // 
-            BaseBlockSubtype = null,
+            BaseBlockSubtype = "OCFi_Reactor",
 
             // All SubtypeIds that can be part of this assembly.
             AllowedBlockSubtypes = new[]
             {
-                "OCFi_Conduit",
-                "OCFi_Nozzle",
-                "OCFi_Reactor",
-            },
+            "OCFi_Conduit",
+            "OCFi_Nozzle",
+            "OCFi_Reactor",
+        },
 
             // Allowed connection directions & whitelists, measured in blocks.
             // If an allowed SubtypeId is not included here, connections are allowed on all sides.
@@ -71,8 +66,7 @@ namespace Scripts.ModularAssemblies
             {
                 ["OCFi_Reactor"] = new Dictionary<Vector3I, string[]>
                 {
-                    // In this definition, a small reactor can only connect on faces with conveyors.
-                    [Vector3I.Forward] = Array.Empty<string>(), // Build Info is really handy for checking directions.
+                    [Vector3I.Forward] = Array.Empty<string>(),
                     [Vector3I.Backward] = Array.Empty<string>(),
                     [Vector3I.Left] = Array.Empty<string>(),
                     [Vector3I.Right] = Array.Empty<string>(),
@@ -81,13 +75,11 @@ namespace Scripts.ModularAssemblies
                 },
                 ["OCFi_Nozzle"] = new Dictionary<Vector3I, string[]>
                 {
-                    // In this definition, a small reactor can only connect on faces with conveyors.
-                    [Vector3I.Forward] = Array.Empty<string>(), // Build Info is really handy for checking directions.
+                    [Vector3I.Forward] = Array.Empty<string>(),
                 },
                 ["OCFi_Conduit"] = new Dictionary<Vector3I, string[]>
                 {
-                    // In this definition, a small reactor can only connect on faces with conveyors.
-                    [Vector3I.Forward] = Array.Empty<string>(), // Build Info is really handy for checking directions.
+                    [Vector3I.Forward] = Array.Empty<string>(),
                     [Vector3I.Backward] = Array.Empty<string>(),
                 }
             },

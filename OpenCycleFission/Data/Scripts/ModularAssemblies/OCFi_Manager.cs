@@ -55,20 +55,25 @@ namespace Scripts.ModularAssemblies
 
         public void OnPartAdd(int PhysicalAssemblyId, IMyCubeBlock NewBlockEntity, bool IsBaseBlock)
         {
+            MyAPIGateway.Utilities.ShowNotification($"OnPartAdd called: Assembly {PhysicalAssemblyId}, Block {NewBlockEntity.DisplayNameText}, IsBaseBlock {IsBaseBlock}", 1000 / 60);
+
             if (!Reactors.ContainsKey(PhysicalAssemblyId))
+            {
                 Reactors.Add(PhysicalAssemblyId, new OCFi_ReactorLogic(PhysicalAssemblyId));
+                MyAPIGateway.Utilities.ShowNotification($"New reactor logic created for assembly {PhysicalAssemblyId}", 1000 / 60);
+            }
 
             Reactors[PhysicalAssemblyId].AddPart(NewBlockEntity);
-            MyAPIGateway.Utilities.ShowNotification($"Part added to assembly {PhysicalAssemblyId}", 1000 / 60);
         }
 
         public void OnPartRemove(int PhysicalAssemblyId, IMyCubeBlock BlockEntity, bool IsBaseBlock)
         {
+            MyAPIGateway.Utilities.ShowNotification($"OnPartRemove called: Assembly {PhysicalAssemblyId}, Block {BlockEntity.DisplayNameText}, IsBaseBlock {IsBaseBlock}", 1000 / 60);
+
             if (!Reactors.ContainsKey(PhysicalAssemblyId))
                 return;
 
             Reactors[PhysicalAssemblyId].RemovePart(BlockEntity);
-            MyAPIGateway.Utilities.ShowNotification($"Part removed from assembly {PhysicalAssemblyId}", 1000 / 60);
         }
     }
 }

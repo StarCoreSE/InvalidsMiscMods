@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using Sandbox.ModAPI;
 using Scripts.ModularAssemblies.Communication;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
@@ -9,6 +10,7 @@ namespace Scripts.ModularAssemblies
     [MySessionComponentDescriptor(MyUpdateOrder.AfterSimulation)]
     internal class OCFiManager : MySessionComponentBase
     {
+        public static OCFiManager I;
         public ModularDefinitionApi ModularApi = new ModularDefinitionApi();
         public Dictionary<int, OCFi_ReactorLogic> Reactors = new Dictionary<int, OCFi_ReactorLogic>();
 
@@ -17,17 +19,29 @@ namespace Scripts.ModularAssemblies
         public override void LoadData()
         {
             ModularApi.Init(ModContext);
+            I = this;
+            MyAPIGateway.Utilities.ShowNotification("OCFiManager loaded", 1000 / 60);
+        }
+
+        protected override void UnloadData()
+        {
+            I = null;
+            MyAPIGateway.Utilities.ShowNotification("OCFiManager unloaded", 1000 / 60);
         }
 
         public override void UpdateAfterSimulation()
         {
             if (!ModularApi.IsReady)
+            {
+                MyAPIGateway.Utilities.ShowNotification("Modular API not ready", 1000 / 60);
                 return;
+            }
 
             if (!_didRegisterAssemblyClose)
             {
                 ModularApi.AddOnAssemblyClose(assemblyId => Reactors.Remove(assemblyId));
                 _didRegisterAssemblyClose = true;
+                MyAPIGateway.Utilities.ShowNotification("Registered assembly close handler", 1000 / 60);
             }
 
             foreach (var reactor in Reactors.Values)
@@ -45,6 +59,7 @@ namespace Scripts.ModularAssemblies
                 Reactors.Add(PhysicalAssemblyId, new OCFi_ReactorLogic(PhysicalAssemblyId));
 
             Reactors[PhysicalAssemblyId].AddPart(NewBlockEntity);
+            MyAPIGateway.Utilities.ShowNotification($"Part added to assembly {PhysicalAssemblyId}", 1000 / 60);
         }
 
         public void OnPartRemove(int PhysicalAssemblyId, IMyCubeBlock BlockEntity, bool IsBaseBlock)
@@ -52,8 +67,8 @@ namespace Scripts.ModularAssemblies
             if (!Reactors.ContainsKey(PhysicalAssemblyId))
                 return;
 
-            if (!IsBaseBlock)
-                Reactors[PhysicalAssemblyId].RemovePart(BlockEntity);
+            Reactors[PhysicalAssemblyId].RemovePart(BlockEntity);
+            MyAPIGateway.Utilities.ShowNotification($"Part removed from assembly {PhysicalAssemblyId}", 1000 / 60);
         }
     }
 }

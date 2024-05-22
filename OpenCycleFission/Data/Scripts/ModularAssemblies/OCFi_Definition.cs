@@ -29,6 +29,8 @@ namespace Scripts.ModularAssemblies
             // Triggers whenever a new part is added to an assembly.
             OnPartAdd = (assemblyId, block, isBasePart) =>
             {
+                OCFiManager.I.OnPartAdd(assemblyId, block, isBasePart);
+
                 MyAPIGateway.Utilities.ShowMessage("Modular Assemblies", $"OCFi_Definition.OnPartAdd called.\nAssembly: {assemblyId}\nBlock: {block.DisplayNameText}\nIsBasePart: {isBasePart}");
                 MyAPIGateway.Utilities.ShowNotification("Assembly has " + ModularApi.GetMemberParts(assemblyId).Length + " blocks.");
             },
@@ -36,6 +38,8 @@ namespace Scripts.ModularAssemblies
             // Triggers whenever a part is removed from an assembly.
             OnPartRemove = (assemblyId, block, isBasePart) =>
             {
+                OCFiManager.I.OnPartRemove(assemblyId, block, isBasePart);
+
                 MyAPIGateway.Utilities.ShowMessage("Modular Assemblies", $"OCFi_Definition.OnPartRemove called.\nAssembly: {assemblyId}\nBlock: {block.DisplayNameText}\nIsBasePart: {isBasePart}");
                 MyAPIGateway.Utilities.ShowNotification("Assembly has " + ModularApi.GetMemberParts(assemblyId).Length + " blocks.");
             },

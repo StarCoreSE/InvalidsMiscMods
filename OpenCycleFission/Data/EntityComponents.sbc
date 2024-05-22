@@ -1,0 +1,13 @@
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <EntityComponents>
+	  <EntityComponent xsi:type="MyObjectBuilder_ModStorageComponentDefinition">
+		  <Id>
+			  <TypeId>ModStorageComponent</TypeId>
+			  <SubtypeId>OpenCycleFission</SubtypeId>
+		  </Id>
+		  <RegisteredStorageGuids>
+			  <guid>f5d9a80f-228c-4f28-b1a5-a6e2eceeda4e</guid>
+		  </RegisteredStorageGuids>
+	  </EntityComponent>
+  </EntityComponents>
+</Definitions>

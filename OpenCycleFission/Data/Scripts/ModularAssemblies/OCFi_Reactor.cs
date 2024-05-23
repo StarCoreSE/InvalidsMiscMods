@@ -6,6 +6,30 @@ using VRage.Game.ModAPI;
 namespace Scripts.ModularAssemblies
 {
     [MySessionComponentDescriptor(MyUpdateOrder.AfterSimulation)]
+
+    public class PIDController
+    {
+        private float _kP, _kI, _kD;
+        private float _integral, _previousError;
+
+        public PIDController(float kP, float kI, float kD)
+        {
+            _kP = kP;
+            _kI = kI;
+            _kD = kD;
+        }
+
+        public float Compute(float setpoint, float actual, float deltaTime)
+        {
+            float error = setpoint - actual;
+            _integral += error * deltaTime;
+            float derivative = (error - _previousError) / deltaTime;
+            _previousError = error;
+            return _kP * error + _kI * _integral + _kD * derivative;
+        }
+    }
+
+    [MySessionComponentDescriptor(MyUpdateOrder.AfterSimulation)]
     public class OCFi_ReactorLogic : MySessionComponentBase
     {
         public static List<OCFi_ReactorLogic> Reactors = new List<OCFi_ReactorLogic>();
@@ -14,11 +38,15 @@ namespace Scripts.ModularAssemblies
 
         private float temperature = 0f;
         private const float maxTemperature = 5000f;
-        private const float temperatureIncrement = 50f;
+        private const float targetTemperature = 3500f;
+        private const float maxHeatGenerationRate = 100f; // Maximum heat generated per tick
+        private PIDController _pidController;
+        private float controlRodAdjustment = 0f; // Adjustment factor from PID
 
         public OCFi_ReactorLogic(int physicalAssemblyId)
         {
             PhysicalAssemblyId = physicalAssemblyId;
+            _pidController = new PIDController(0.1f, 0.01f, 0.01f); // Tune these values as necessary
         }
 
         public override void LoadData()
@@ -35,7 +63,8 @@ namespace Scripts.ModularAssemblies
 
         public override void UpdateAfterSimulation()
         {
-            UpdateTemperature();
+            float deltaTime = 1.0f / 60.0f; // Assuming the simulation updates at 60 FPS
+            UpdateTemperature(deltaTime);
             ShowTemperatureNotification();
         }
 
@@ -51,11 +80,29 @@ namespace Scripts.ModularAssemblies
             MyAPIGateway.Utilities.ShowNotification($"Part removed from reactor {PhysicalAssemblyId}: {block.DisplayNameText}", 1000 / 60);
         }
 
-        private void UpdateTemperature()
+        private void UpdateTemperature(float deltaTime)
         {
-            if (temperature < maxTemperature)
+            // Compute control rod adjustment using PID controller
+            controlRodAdjustment = _pidController.Compute(targetTemperature, temperature, deltaTime);
+
+            // Adjust temperature based on control rod adjustment and cap the heat generation rate
+            float heatGenerated = controlRodAdjustment;
+            if (heatGenerated > maxHeatGenerationRate)
             {
-                temperature += temperatureIncrement;
+                heatGenerated = maxHeatGenerationRate;
+            }
+
+            temperature += heatGenerated * deltaTime;
+
+            // Ensure temperature remains within bounds
+            if (temperature > maxTemperature)
+            {
+                temperature = maxTemperature;
+                MyAPIGateway.Utilities.ShowNotification("Reactor overheated! Control rods at maximum!", 1000 / 60);
+            }
+            else if (temperature < 0)
+            {
+                temperature = 0;
             }
         }
 
@@ -76,3 +123,4 @@ namespace Scripts.ModularAssemblies
         }
     }
 }
+

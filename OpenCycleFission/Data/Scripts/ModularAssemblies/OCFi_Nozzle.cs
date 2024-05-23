@@ -11,7 +11,7 @@ namespace Scripts.ModularAssemblies
     public class OCFi_NozzleLogic : MyGameLogicComponent
     {
         private IMyThrust _nozzle;
-        private float heatConsumption = 10f; // Heat consumed per tick
+        private float heatConsumption = 1f; // Heat consumed per tick
         private bool isFiring = false;
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
@@ -33,7 +33,7 @@ namespace Scripts.ModularAssemblies
                 {
                     if (reactor.ConsumeHeat(heatConsumption))
                     {
-                        MyAPIGateway.Utilities.ShowNotification($"Nozzle consuming heat: {heatConsumption} K", 1000 / 60);
+                        //MyAPIGateway.Utilities.ShowNotification($"Nozzle consuming heat: {heatConsumption} K", 1000 / 60);
                         break; // Stop after finding the first reactor with enough heat
                     }
                 }

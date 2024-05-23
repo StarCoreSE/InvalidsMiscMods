@@ -2,13 +2,13 @@
 using Sandbox.ModAPI;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
-using VRage.Utils;
 
 namespace Scripts.ModularAssemblies
 {
     [MySessionComponentDescriptor(MyUpdateOrder.AfterSimulation)]
     public class OCFi_ReactorLogic : MySessionComponentBase
     {
+        public static List<OCFi_ReactorLogic> Reactors = new List<OCFi_ReactorLogic>();
         public int PhysicalAssemblyId { get; private set; }
         private List<IMyCubeBlock> _parts = new List<IMyCubeBlock>();
 
@@ -19,7 +19,18 @@ namespace Scripts.ModularAssemblies
         public OCFi_ReactorLogic(int physicalAssemblyId)
         {
             PhysicalAssemblyId = physicalAssemblyId;
-            MyAPIGateway.Utilities.ShowNotification($"Reactor {physicalAssemblyId} created", 1000 / 60);
+        }
+
+        public override void LoadData()
+        {
+            Reactors.Add(this);
+            MyAPIGateway.Utilities.ShowNotification("Reactor loaded", 1000 / 60);
+        }
+
+        protected override void UnloadData()
+        {
+            Reactors.Remove(this);
+            MyAPIGateway.Utilities.ShowNotification("Reactor unloaded", 1000 / 60);
         }
 
         public override void UpdateAfterSimulation()

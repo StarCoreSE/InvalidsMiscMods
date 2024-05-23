@@ -60,7 +60,9 @@ namespace Scripts.ModularAssemblies
 
             if (!Reactors.ContainsKey(PhysicalAssemblyId))
             {
-                Reactors.Add(PhysicalAssemblyId, new OCFi_ReactorLogic(PhysicalAssemblyId));
+                var reactorLogic = new OCFi_ReactorLogic(PhysicalAssemblyId);
+                reactorLogic.LoadData();
+                Reactors.Add(PhysicalAssemblyId, reactorLogic);
                 MyAPIGateway.Utilities.ShowNotification($"New reactor logic created for assembly {PhysicalAssemblyId}", 1000 / 60);
             }
 

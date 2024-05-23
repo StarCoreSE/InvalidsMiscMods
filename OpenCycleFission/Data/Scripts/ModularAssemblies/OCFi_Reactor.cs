@@ -34,12 +34,12 @@ namespace Scripts.ModularAssemblies
     {
         public static List<OCFi_ReactorLogic> Reactors = new List<OCFi_ReactorLogic>();
         public int PhysicalAssemblyId { get; private set; }
+        public float Temperature { get; private set; }
         private List<IMyCubeBlock> _parts = new List<IMyCubeBlock>();
 
-        private float temperature = 0f;
         private const float maxTemperature = 5000f;
         private const float targetTemperature = 3500f;
-        private const float maxHeatGenerationRate = 100f; // Maximum heat generated per tick
+        private const float maxHeatGenerationRate = 500f; // Maximum heat generated per tick
         private PIDController _pidController;
         private float controlRodAdjustment = 0f; // Adjustment factor from PID
 
@@ -83,7 +83,7 @@ namespace Scripts.ModularAssemblies
         private void UpdateTemperature(float deltaTime)
         {
             // Compute control rod adjustment using PID controller
-            controlRodAdjustment = _pidController.Compute(targetTemperature, temperature, deltaTime);
+            controlRodAdjustment = _pidController.Compute(targetTemperature, Temperature, deltaTime);
 
             // Adjust temperature based on control rod adjustment and cap the heat generation rate
             float heatGenerated = controlRodAdjustment;
@@ -92,26 +92,26 @@ namespace Scripts.ModularAssemblies
                 heatGenerated = maxHeatGenerationRate;
             }
 
-            temperature += heatGenerated * deltaTime;
+            Temperature += heatGenerated * deltaTime;
 
             // Ensure temperature remains within bounds
-            if (temperature > maxTemperature)
+            if (Temperature > maxTemperature)
             {
-                temperature = maxTemperature;
+                Temperature = maxTemperature;
                 MyAPIGateway.Utilities.ShowNotification("Reactor overheated! Control rods at maximum!", 1000 / 60);
             }
-            else if (temperature < 0)
+            else if (Temperature < 0)
             {
-                temperature = 0;
+                Temperature = 0;
             }
         }
 
         public bool ConsumeHeat(float amount)
         {
-            if (temperature >= amount)
+            if (Temperature >= amount)
             {
-                temperature -= amount;
-                MyAPIGateway.Utilities.ShowNotification($"Heat consumed: {amount} K, remaining: {temperature} K", 1000 / 60);
+                Temperature -= amount;
+                // MyAPIGateway.Utilities.ShowNotification($"Heat consumed: {amount} K, remaining: {Temperature} K", 1000 / 60);
                 return true;
             }
             return false;
@@ -119,8 +119,7 @@ namespace Scripts.ModularAssemblies
 
         private void ShowTemperatureNotification()
         {
-            MyAPIGateway.Utilities.ShowNotification($"Reactor Temperature: {temperature} K", 1000 / 60);
+            MyAPIGateway.Utilities.ShowNotification($"Reactor Temperature: {Temperature} K", 1000 / 60);
         }
     }
 }
-

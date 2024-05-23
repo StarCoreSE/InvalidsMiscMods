@@ -2,11 +2,11 @@
 using Sandbox.ModAPI;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
+using VRageMath;
 
 namespace Scripts.ModularAssemblies
 {
     [MySessionComponentDescriptor(MyUpdateOrder.AfterSimulation)]
-
     public class PIDController
     {
         private float _kP, _kI, _kD;
@@ -36,16 +36,19 @@ namespace Scripts.ModularAssemblies
         public int PhysicalAssemblyId { get; private set; }
         public float Temperature { get; private set; }
         private List<IMyCubeBlock> _parts = new List<IMyCubeBlock>();
+        private IMyCubeBlock _reactorBlock;
 
         private const float maxTemperature = 5000f;
         private const float targetTemperature = 3500f;
         private const float maxHeatGenerationRate = 500f; // Maximum heat generated per tick
+        private const float minTemperatureThreshold = 2000f; // Minimum temperature threshold for optimal operation
         private PIDController _pidController;
         private float controlRodAdjustment = 0f; // Adjustment factor from PID
 
-        public OCFi_ReactorLogic(int physicalAssemblyId)
+        public OCFi_ReactorLogic(int physicalAssemblyId, IMyCubeBlock reactorBlock)
         {
             PhysicalAssemblyId = physicalAssemblyId;
+            _reactorBlock = reactorBlock;
             _pidController = new PIDController(0.1f, 0.01f, 0.01f); // Tune these values as necessary
         }
 
@@ -111,7 +114,6 @@ namespace Scripts.ModularAssemblies
             if (Temperature >= amount)
             {
                 Temperature -= amount;
-                // MyAPIGateway.Utilities.ShowNotification($"Heat consumed: {amount} K, remaining: {Temperature} K", 1000 / 60);
                 return true;
             }
             return false;
@@ -121,5 +123,16 @@ namespace Scripts.ModularAssemblies
         {
             MyAPIGateway.Utilities.ShowNotification($"Reactor Temperature: {Temperature} K", 1000 / 60);
         }
+
+        public Vector3D GetPosition()
+        {
+            return _reactorBlock.GetPosition();
+        }
+
+        public bool ContainsPart(IMyCubeBlock part)
+        {
+            return _parts.Contains(part);
+        }
+
     }
 }

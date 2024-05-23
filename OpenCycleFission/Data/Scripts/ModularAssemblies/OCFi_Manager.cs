@@ -60,9 +60,7 @@ namespace Scripts.ModularAssemblies
 
             if (!Reactors.ContainsKey(PhysicalAssemblyId))
             {
-                var reactorLogic = new OCFi_ReactorLogic(PhysicalAssemblyId);
-                reactorLogic.LoadData();
-                Reactors.Add(PhysicalAssemblyId, reactorLogic);
+                Reactors.Add(PhysicalAssemblyId, new OCFi_ReactorLogic(PhysicalAssemblyId, NewBlockEntity));
                 MyAPIGateway.Utilities.ShowNotification($"New reactor logic created for assembly {PhysicalAssemblyId}", 1000 / 60);
             }
 
@@ -77,6 +75,18 @@ namespace Scripts.ModularAssemblies
                 return;
 
             Reactors[PhysicalAssemblyId].RemovePart(BlockEntity);
+        }
+
+        public OCFi_ReactorLogic GetReactorForNozzle(IMyCubeBlock nozzle)
+        {
+            foreach (var reactor in Reactors.Values)
+            {
+                if (reactor.ContainsPart(nozzle))
+                {
+                    return reactor;
+                }
+            }
+            return null;
         }
     }
 }

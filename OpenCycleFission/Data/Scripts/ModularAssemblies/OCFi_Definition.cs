@@ -22,20 +22,17 @@ namespace Scripts.ModularAssemblies
             {
                 OCFiManager.I.OnPartAdd(assemblyId, block, isBasePart);
                 MyAPIGateway.Utilities.ShowMessage("Modular Assemblies", $"OCFi_Definition.OnPartAdd called.\nAssembly: {assemblyId}\nBlock: {block.DisplayNameText}\nIsBasePart: {isBasePart}");
-                MyAPIGateway.Utilities.ShowNotification("Assembly has " + OCFiManager.I.ModularApi.GetMemberParts(assemblyId).Length + " blocks.");
             },
 
             OnPartRemove = (assemblyId, block, isBasePart) =>
             {
                 OCFiManager.I.OnPartRemove(assemblyId, block, isBasePart);
                 MyAPIGateway.Utilities.ShowMessage("Modular Assemblies", $"OCFi_Definition.OnPartRemove called.\nAssembly: {assemblyId}\nBlock: {block.DisplayNameText}\nIsBasePart: {isBasePart}");
-                MyAPIGateway.Utilities.ShowNotification("Assembly has " + OCFiManager.I.ModularApi.GetMemberParts(assemblyId).Length + " blocks.");
             },
 
             OnPartDestroy = (assemblyId, block, isBasePart) =>
             {
                 MyAPIGateway.Utilities.ShowMessage("Modular Assemblies", $"OCFi_Definition.OnPartDestroy called.\nI hope the explosion was pretty.");
-                MyAPIGateway.Utilities.ShowNotification("Assembly has " + OCFiManager.I.ModularApi.GetMemberParts(assemblyId).Length + " blocks.");
             },
 
             BaseBlockSubtype = "OCFi_Reactor",

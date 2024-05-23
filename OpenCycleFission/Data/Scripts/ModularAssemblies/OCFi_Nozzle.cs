@@ -3,16 +3,18 @@ using Sandbox.ModAPI;
 using VRage.Game.Components;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
+using System.Collections.Generic;
 using VRage.Game.ModAPI;
 
 namespace Scripts.ModularAssemblies
 {
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_Thrust), false, "OCFi_Nozzle")]
+    [MySessionComponentDescriptor(MyUpdateOrder.AfterSimulation)]
     public class OCFi_NozzleLogic : MyGameLogicComponent
     {
         private IMyThrust _nozzle;
-        private const float maxHeatConsumption = 1f; // Maximum heat consumed per tick
-        private const float minTemperatureThreshold = 2000f; // Minimum temperature threshold for optimal thrust
+        private OCFi_ReactorLogic _reactor;
+        private float heatConsumption = 1f; // Heat consumed per tick
         private bool isFiring = false;
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
@@ -20,38 +22,48 @@ namespace Scripts.ModularAssemblies
             base.Init(objectBuilder);
             _nozzle = (IMyThrust)Entity;
             NeedsUpdate |= MyEntityUpdateEnum.EACH_FRAME;
-            // MyAPIGateway.Utilities.ShowNotification($"OCFi Nozzle Initialized: {_nozzle.CustomName}", 1000 / 60);
+
+            MyAPIGateway.Utilities.ShowNotification($"OCFi Nozzle Initialized: {_nozzle.CustomName}", 1000 / 60);
+            NeedsUpdate |= MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
+        }
+
+        public override void UpdateOnceBeforeFrame()
+        {
+            base.UpdateOnceBeforeFrame();
+            FindReactor();
         }
 
         public override void UpdateAfterSimulation()
         {
             base.UpdateAfterSimulation();
-            isFiring = _nozzle.CurrentThrust > 0.01f; // Slightly above zero to ensure detection
+            isFiring = _nozzle.CurrentThrust > 0;
 
             if (isFiring)
             {
-                foreach (var reactor in OCFi_ReactorLogic.Reactors)
+                if (_reactor != null)
                 {
-                    float currentHeatConsumption = maxHeatConsumption;
-
-                    // Reduce heat consumption if reactor temperature is below threshold
-                    if (reactor.Temperature < minTemperatureThreshold)
+                    if (_reactor.ConsumeHeat(heatConsumption))
                     {
-                        float efficiency = reactor.Temperature / minTemperatureThreshold;
-                        currentHeatConsumption *= efficiency;
-                        _nozzle.ThrustMultiplier = efficiency;
+                        // MyAPIGateway.Utilities.ShowNotification($"Nozzle consuming heat: {heatConsumption} K", 1000 / 60);
                     }
                     else
                     {
-                        _nozzle.ThrustMultiplier = 1.0f; // Full thrust efficiency
-                    }
-
-                    if (reactor.ConsumeHeat(currentHeatConsumption))
-                    {
-                        // MyAPIGateway.Utilities.ShowNotification($"Nozzle consuming heat: {currentHeatConsumption} K", 1000 / 60);
-                        break; // Stop after finding the first reactor with enough heat
+                        // MyAPIGateway.Utilities.ShowNotification("Not enough heat available!", 1000 / 60);
                     }
                 }
+            }
+        }
+
+        private void FindReactor()
+        {
+            _reactor = OCFiManager.I?.GetReactorForNozzle(_nozzle);
+            if (_reactor != null)
+            {
+                MyAPIGateway.Utilities.ShowNotification($"Reactor found for nozzle", 1000 / 60);
+            }
+            else
+            {
+                MyAPIGateway.Utilities.ShowNotification("No reactor found for nozzle", 1000 / 60);
             }
         }
     }

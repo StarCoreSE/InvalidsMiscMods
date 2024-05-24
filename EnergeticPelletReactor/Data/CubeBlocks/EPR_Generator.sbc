@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+	<CubeBlocks>
+		<Definition xsi:type="MyObjectBuilder_BatteryBlockDefinition">
+			<Id>
+				<TypeId>BatteryBlock</TypeId>
+				<SubtypeId>EPR_Generator</SubtypeId>
+			</Id>
+			<DisplayName>EPR Generator</DisplayName>
+			<Description>EPR_Generator</Description>
+			<Icon>Textures\GUI\Icons\AstronautBackpack.dds</Icon>
+			<CubeSize>Large</CubeSize>
+			<BlockTopology>TriangleMesh</BlockTopology>
+			<Size x="1" y="1" z="1"/>
+			<ModelOffset x="0" y="0" z="0"/>
+			<Model>Models\EPR_Generator.mwm</Model>
+			<Components>
+				<Component Subtype="SteelPlate" Count="20" />
+				<Component Subtype="Construction" Count="10" />
+				<Component Subtype="PowerCell" Count="80"/>
+				<Component Subtype="Computer" Count="25" />
+				<Component Subtype="Construction" Count="20" />
+				<Component Subtype="SteelPlate" Count="60" />
+			</Components>
+			<CriticalComponent Subtype="PowerCell" Index="0" />
+			<BlockPairName>EPR_Generator</BlockPairName>
+		</Definition>
+	</CubeBlocks>
+</Definitions>

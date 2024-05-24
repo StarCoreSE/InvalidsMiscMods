@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+	<CubeBlocks>
+		<Definition xsi:type="MyObjectBuilder_ReactorDefinition">
+			<Id>
+				<TypeId>Reactor</TypeId>
+				<SubtypeId>OCFi_Reactor</SubtypeId>
+			</Id>
+			<DisplayName>OCFi_Reactor</DisplayName>
+			<Description>OCFi_Reactor</Description>
+			<Icon>Textures\GUI\Icons\AstronautBackpack.dds</Icon>
+			<CubeSize>Large</CubeSize>
+			<BlockTopology>TriangleMesh</BlockTopology>
+			<Size x="3" y="3" z="3"/>
+			<ModelOffset x="0" y="0" z="0"/>
+			<Model>Models\OCFi_Reactor.mwm</Model>
+			<Components>
+				<Component Subtype="SteelPlate" Count="20" />
+				<Component Subtype="Construction" Count="10" />
+				<Component Subtype="PowerCell" Count="80"/>
+				<Component Subtype="Computer" Count="25" />
+				<Component Subtype="Construction" Count="20" />
+				<Component Subtype="SteelPlate" Count="60" />
+			</Components>
+			<CriticalComponent Subtype="PowerCell" Index="0" />
+			<BlockPairName>OCFi_Reactor</BlockPairName>
+		</Definition>
+	</CubeBlocks>
+</Definitions>

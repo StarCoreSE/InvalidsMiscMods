@@ -1,0 +1,56 @@
+<?xml version="1.0" ?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <CubeBlocks>
+    <Definition xsi:type="MyObjectBuilder_ThrustDefinition">
+      <Id>
+        <TypeId>Thrust</TypeId>
+        <SubtypeId>OCFi_Nozzle</SubtypeId>
+      </Id>
+      <DisplayName>OCFi_Nozzle</DisplayName>
+      <Description>OCFi_Nozzle</Description>
+      <Icon>Textures\GUI\Icons\AstronautBackpack.dds</Icon>
+      <CubeSize>Large</CubeSize>
+      <BlockTopology>TriangleMesh</BlockTopology>
+      <Size x="1" y="1" z="1"/>
+      <ModelOffset x="0" y="0" z="0"/>
+      <Model>Models\OCFi_Nozzle.mwm</Model>
+      <Components>
+        <Component Subtype="SteelPlate" Count="100" />
+        <Component Subtype="Construction" Count="150" />
+        <Component Subtype="MetalGrid" Count="250" />
+        <Component Subtype="LargeTube" Count="40" />
+        <Component Subtype="Construction" Count="30" />
+        <Component Subtype="SteelPlate" Count="50" />
+      </Components>
+      <CriticalComponent Subtype="LargeTube" Index="0" />
+      <MountPoints>
+      </MountPoints>
+      <BlockPairName>OCFi_Nozzle</BlockPairName>
+      <ResourceSinkGroup>Thrust</ResourceSinkGroup>
+      <ForceMagnitude>10000</ForceMagnitude>
+      <MaxPowerConsumption>0.200</MaxPowerConsumption>
+      <MinPowerConsumption>0.000002</MinPowerConsumption>
+      <FlameDamageLengthScale>0.61</FlameDamageLengthScale>
+      <FlameLengthScale>1.5</FlameLengthScale>
+      <SlowdownFactor>1</SlowdownFactor>
+      <FlameIdleColor>
+        <X>0.2745098</X>
+        <Y>0.4090196</Y>
+        <Z>0.6505882</Z>
+        <W>0.75</W>
+      </FlameIdleColor>
+      <FlameFullColor>
+        <X>0.2745098</X>
+        <Y>0.4090196</Y>
+        <Z>0.6505882</Z>
+        <W>0.75</W>
+      </FlameFullColor>
+      <FlamePointMaterial>EngineThrustMiddle</FlamePointMaterial>
+      <FlameLengthMaterial>EngineThrustMiddle</FlameLengthMaterial>
+      <FlameFlare>LargeGridSmallThruster</FlameFlare>
+      <FlameVisibilityDistance>500</FlameVisibilityDistance>
+      <FlameGlareQuerySize>1</FlameGlareQuerySize>
+      <PrimarySound>LrgShipSmJet</PrimarySound>
+    </Definition>
+  </CubeBlocks>
+</Definitions>

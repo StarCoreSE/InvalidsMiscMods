@@ -109,7 +109,7 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
         private bool ShouldBeTracked(IMyEntity entity)
         {
             var grid = entity as IMyCubeGrid;
-            return grid != null && !grid.IsStatic && grid.Physics != null;
+            return grid != null && /*!grid.IsStatic &&*/ grid.Physics != null;
         }
 
         protected override void UnloadData()

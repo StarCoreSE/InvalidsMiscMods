@@ -5,11 +5,11 @@ using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using System.Collections.Generic;
 using VRage.Game.ModAPI;
+using Scripts.ModularAssemblies.Communication;
 
 namespace Scripts.ModularAssemblies
 {
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_Thrust), false, "OCFi_Nozzle")]
-    [MySessionComponentDescriptor(MyUpdateOrder.AfterSimulation)]
     public class OCFi_NozzleLogic : MyGameLogicComponent
     {
         private IMyThrust _nozzle;
@@ -24,18 +24,16 @@ namespace Scripts.ModularAssemblies
             NeedsUpdate |= MyEntityUpdateEnum.EACH_FRAME;
 
             MyAPIGateway.Utilities.ShowNotification($"OCFi Nozzle Initialized: {_nozzle.CustomName}", 1000 / 60);
-            NeedsUpdate |= MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
-        }
-
-        public override void UpdateOnceBeforeFrame()
-        {
-            base.UpdateOnceBeforeFrame();
-            FindReactor();
         }
 
         public override void UpdateAfterSimulation()
         {
             base.UpdateAfterSimulation();
+            if (_reactor == null)
+            {
+                FindReactor();
+            }
+
             isFiring = _nozzle.CurrentThrust > 0;
 
             if (isFiring)
@@ -59,11 +57,11 @@ namespace Scripts.ModularAssemblies
             _reactor = OCFiManager.I?.GetReactorForNozzle(_nozzle);
             if (_reactor != null)
             {
-                MyAPIGateway.Utilities.ShowNotification($"Reactor found for nozzle", 1000 / 60);
+                MyAPIGateway.Utilities.ShowNotification("Reactor found for nozzle", 1000 / 60);
             }
             else
             {
-                MyAPIGateway.Utilities.ShowNotification("No reactor found for nozzle", 1000 / 60);
+                //MyAPIGateway.Utilities.ShowNotification("No reactor found for nozzle", 1000 / 60);
             }
         }
     }

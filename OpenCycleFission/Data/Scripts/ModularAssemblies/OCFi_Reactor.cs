@@ -107,6 +107,8 @@ namespace Scripts.ModularAssemblies
             {
                 Temperature = 0;
             }
+
+            MyAPIGateway.Utilities.ShowNotification($"Control Rod Position: {controlRodAdjustment}", 1000 / 60);
         }
 
         public bool ConsumeHeat(float amount)
@@ -133,6 +135,5 @@ namespace Scripts.ModularAssemblies
         {
             return _parts.Contains(part);
         }
-
     }
 }

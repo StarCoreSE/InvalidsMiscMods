@@ -20,14 +20,12 @@ namespace Scripts.ModularAssemblies
         {
             ModularApi.Init(ModContext);
             I = this;
-            MyAPIGateway.Utilities.ShowNotification("OCFiManager loaded", 1000 / 60);
         }
 
         protected override void UnloadData()
         {
             I = null;
             ModularApi.UnloadData();
-            MyAPIGateway.Utilities.ShowNotification("OCFiManager unloaded", 1000 / 60);
         }
 
         public override void UpdateAfterSimulation()

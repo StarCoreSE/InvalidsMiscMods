@@ -29,8 +29,9 @@ namespace ShipyardMod.ProcessHandlers
         {
             if (ProcessShipyardDetection.ShipyardsList.Count == 0) return;
 
-            ShipyardItem currentItem = ProcessShipyardDetection.ShipyardsList.ElementAt(_currentShipyardIndex);
-            _currentShipyardIndex = (_currentShipyardIndex + 1) % ProcessShipyardDetection.ShipyardsList.Count;
+            int index = _currentShipyardIndex % ProcessShipyardDetection.ShipyardsList.Count;
+            ShipyardItem currentItem = ProcessShipyardDetection.ShipyardsList.ElementAtOrDefault(index);
+            if (currentItem == null) return;
 
             var grid = (IMyCubeGrid)currentItem.YardEntity;
 

@@ -51,11 +51,14 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
         {
             Instance = this;
             NetworkId = 12493;
-            if (MyAPIGateway.Multiplayer.IsServer)
+            if (!MyAPIGateway.Utilities.IsDedicated)
             {
                 MyAPIGateway.Utilities.MessageEnteredSender += HandleMessage;
             }
-            MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(NetworkId, ReceivedPacket);
+            else
+            {
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(NetworkId, ReceivedPacket);
+            }
 
             MyAPIGateway.Entities.GetEntities(null, entity =>
             {
@@ -121,19 +124,20 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
                 Writer = null;
             }
             TrackedItems?.Clear();
-            if (MyAPIGateway.Multiplayer.IsServer)
+            if (!MyAPIGateway.Utilities.IsDedicated)
             {
                 MyAPIGateway.Utilities.MessageEnteredSender -= HandleMessage;
             }
-            MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(NetworkId, ReceivedPacket);
+            else
+            {
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(NetworkId, ReceivedPacket);
+            }
             MyAPIGateway.Entities.OnEntityAdd -= OnEntityAdd;
             MyAPIGateway.Entities.OnEntityRemove -= OnEntityRemove;
         }
 
         public void Start()
         {
-            if (!MyAPIGateway.Multiplayer.IsServer) return; // Ensure this runs only on the server
-
             var fileName = $"{DateTime.Now:dd-MM-yyyy HHmm}{Extension}";
 
             try
@@ -166,8 +170,6 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
 
         public void Stop()
         {
-            if (!MyAPIGateway.Multiplayer.IsServer) return; // Ensure this runs only on the server
-
             Recording = false;
             MyAPIGateway.Multiplayer.SendMessageToServer(NetworkId, new byte[] { 0 });
             MyAPIGateway.Utilities.ShowNotification("Recording ended.");

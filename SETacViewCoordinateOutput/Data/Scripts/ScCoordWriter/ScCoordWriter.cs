@@ -17,7 +17,7 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
     public class ScCoordWriter : MySessionComponentBase
     {
         public static ScCoordWriter Instance;
-        private ushort NetworkId;
+        private const ushort NetworkId = 12493;
         private List<TrackedItem> TrackedItems = new List<TrackedItem>();
         private TextWriter Writer;
         private bool Recording;
@@ -50,12 +50,14 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
         public override void LoadData()
         {
             Instance = this;
-            NetworkId = 12493;
-            if (MyAPIGateway.Multiplayer.IsServer)
+            if (!MyAPIGateway.Utilities.IsDedicated)
             {
                 MyAPIGateway.Utilities.MessageEnteredSender += HandleMessage;
             }
-            MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(NetworkId, ReceivedPacket);
+            else
+            {
+                MyAPIGateway.Multiplayer.RegisterSecureMessageHandler(NetworkId, ReceivedPacket);
+            }
 
             MyAPIGateway.Entities.GetEntities(null, entity =>
             {
@@ -106,7 +108,7 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
         private bool ShouldBeTracked(IMyEntity entity)
         {
             var grid = entity as IMyCubeGrid;
-            return grid != null && /*!grid.IsStatic &&*/ grid.Physics != null;
+            return grid != null && grid.Physics != null;
         }
 
         protected override void UnloadData()
@@ -121,18 +123,22 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
                 Writer = null;
             }
             TrackedItems?.Clear();
-            if (MyAPIGateway.Multiplayer.IsServer)
+            if (!MyAPIGateway.Utilities.IsDedicated)
             {
                 MyAPIGateway.Utilities.MessageEnteredSender -= HandleMessage;
             }
-            MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(NetworkId, ReceivedPacket);
+            else
+            {
+                MyAPIGateway.Multiplayer.UnregisterSecureMessageHandler(NetworkId, ReceivedPacket);
+            }
             MyAPIGateway.Entities.OnEntityAdd -= OnEntityAdd;
             MyAPIGateway.Entities.OnEntityRemove -= OnEntityRemove;
         }
 
         public void Start()
         {
-            if (!MyAPIGateway.Multiplayer.IsServer) return; // Ensure this runs only on the server
+            if (!MyAPIGateway.Multiplayer.IsServer)
+                return;
 
             var fileName = $"{DateTime.Now:dd-MM-yyyy HHmm}{Extension}";
 
@@ -160,16 +166,15 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
             }
 
             Recording = true;
-            MyAPIGateway.Multiplayer.SendMessageToServer(NetworkId, new byte[] { 1 });
             MyAPIGateway.Utilities.ShowNotification("Recording started.");
         }
 
         public void Stop()
         {
-            if (!MyAPIGateway.Multiplayer.IsServer) return; // Ensure this runs only on the server
+            if (!MyAPIGateway.Multiplayer.IsServer)
+                return;
 
             Recording = false;
-            MyAPIGateway.Multiplayer.SendMessageToServer(NetworkId, new byte[] { 0 });
             MyAPIGateway.Utilities.ShowNotification("Recording ended.");
             if (Writer != null)
             {
@@ -271,10 +276,10 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
             switch (args[1])
             {
                 case "start":
-                    Start();
+                    MyAPIGateway.Multiplayer.SendMessageToServer(NetworkId, new byte[] { 1 });
                     break;
                 case "stop":
-                    Stop();
+                    MyAPIGateway.Multiplayer.SendMessageToServer(NetworkId, new byte[] { 0 });
                     break;
                 default:
                     {
@@ -289,10 +294,10 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
 
         public void ReceivedPacket(ushort channelId, byte[] data, ulong steamSenderId, bool isSenderServer)
         {
-            if (data != null && data.Length == 1)
+            if (data != null && data.Length == 1 && MyAPIGateway.Multiplayer.IsServer)
             {
-                Recording = data[0] == 1;
-                if (Recording)
+                bool startRecording = data[0] == 1;
+                if (startRecording)
                 {
                     Start();
                 }
@@ -317,11 +322,9 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
             var faction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(owner.IdentityId);
             if (faction != null)
             {
-                // Example, replace with actual way to get faction color if available
-
                 return SmallVector3D(faction.CustomColor);
             }
-            return SmallVector3D(Vector3D.Zero); // Default color if no faction or no color defined
+            return SmallVector3D(Vector3D.Zero);
         }
 
         public IMyIdentity GetGridOwner(IMyCubeGrid grid)
@@ -341,55 +344,44 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
 
         public string ConvertToBase64BinaryVolume(IMyCubeGrid grid)
         {
-            // Get grid dimensions
             var extents = grid.Max - grid.Min + Vector3I.One;
             int width = extents.X;
             int height = extents.Y;
             int depth = extents.Z;
 
-            // Calculate number of bytes needed to store the volume
             int numBytes = (width * height * depth + 7) / 8;
 
-            // Create byte array to store binary volume
             byte[] binaryVolume = new byte[numBytes];
 
-            // Iterate over grid cells
             for (int z = 0; z < depth; z++)
             {
                 for (int y = 0; y < height; y++)
                 {
                     for (int x = 0; x < width; x++)
                     {
-                        // Calculate index in byte array
                         int byteIndex = z * width * height + y * width + x;
                         int bytePosition = byteIndex % 8;
 
-                        // Check if block is present at the cell
                         var block = grid.GetCubeBlock(new Vector3I(x, y, z) + grid.Min);
                         bool blockPresent = block != null;
 
-                        // Set corresponding bit in byte
                         if (blockPresent)
                         {
-                            binaryVolume[byteIndex / 8] |= (byte)(1 << (7 - bytePosition)); // Invert the byte position
+                            binaryVolume[byteIndex / 8] |= (byte)(1 << (7 - bytePosition));
                         }
                     }
                 }
             }
 
-            // Create header with grid extents
             byte[] header = BitConverter.GetBytes(width)
                 .Concat(BitConverter.GetBytes(height))
                 .Concat(BitConverter.GetBytes(depth))
                 .ToArray();
 
-            // Combine header and binary volume
             byte[] result = header.Concat(binaryVolume).ToArray();
 
-            // Compress the result using RLE
             byte[] compressedData = Compress(result);
 
-            // Convert to base64 string
             string base64String = Convert.ToBase64String(compressedData);
 
             return base64String;
@@ -409,7 +401,6 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
                     count++;
                     if (count == 256)
                     {
-                        // Add the current byte and max count (255), reset the count
                         compressedData.Add(currentByte);
                         compressedData.Add(255);
                         count = 1;
@@ -424,7 +415,6 @@ namespace YourName.ModName.Data.Scripts.ScCoordWriter
                 }
             }
 
-            // Add the last byte and its count
             compressedData.Add(currentByte);
             compressedData.Add((byte)count);
 

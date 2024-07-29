@@ -11,7 +11,7 @@ using VRage.ModAPI;
 using VRage.Utils;
 using VRageMath;
 
-namespace YourName.ModName.Data.Scripts.ScCoordWriter
+namespace Invalid.ScCoordWriter
 {
     [MySessionComponentDescriptor(MyUpdateOrder.AfterSimulation)]
     public class ScCoordWriter : MySessionComponentBase

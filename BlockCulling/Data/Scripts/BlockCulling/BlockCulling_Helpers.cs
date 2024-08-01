@@ -15,17 +15,27 @@ namespace Scripts.BlockCulling
         private static readonly Queue<string> _messageQueue = new Queue<string>();
         private static TextWriter _writer;
         private const string LOG_FILE = "BlockCulling_Debug.log";
+        public static bool EnableDebugLogging = false;
+        private const int MAX_LOG_FILES = 10;
 
         static ThreadSafeLog()
         {
             try
             {
-                _writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(LOG_FILE, typeof(ThreadSafeLog));
+                string logFileName = GenerateLogFileName();
+                _writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(logFileName, typeof(ThreadSafeLog));
+                EnqueueMessage($"Starting new debug log for session: {logFileName}");
             }
             catch (Exception e)
             {
                 MyLog.Default.WriteLineAndConsole($"BlockCulling: Failed to initialize debug log: {e.Message}");
             }
+        }
+
+        private static string GenerateLogFileName()
+        {
+            string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            return $"BlockCulling_Debug_{timestamp}.log";
         }
 
         public static void EnqueueMessage(string message)
@@ -35,6 +45,14 @@ namespace Scripts.BlockCulling
             lock (_lock)
             {
                 _messageQueue.Enqueue($"[{DateTime.Now:HH:mm:ss.fff}] {message}");
+            }
+        }
+
+        public static void EnqueueMessageDebug(string message)
+        {
+            if (EnableDebugLogging)
+            {
+                EnqueueMessage($"[DEBUG] {message}");
             }
         }
 

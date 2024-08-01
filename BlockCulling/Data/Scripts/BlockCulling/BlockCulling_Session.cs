@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text;
 using System.Threading;
 using Sandbox.Definitions;
 using Sandbox.ModAPI;
+using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -28,6 +30,25 @@ namespace Scripts.BlockCulling
         public static event Action<IMyCubeGrid> OnGridCullingStarted;
         public static event Action<IMyCubeGrid> OnGridCullingCompleted;
 
+        private int _reportCounter = 0;
+        private const int REPORT_INTERVAL = 600; // Generate report every 10 seconds (60 ticks per second)
+
+        public override void Init(MyObjectBuilder_SessionComponent sessionComponent)
+        {
+            base.Init(sessionComponent);
+            MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
+        }
+
+        private void OnMessageEntered(string messageText, ref bool sendToOthers)
+        {
+            if (messageText.StartsWith("/bcdebug"))
+            {
+                ThreadSafeLog.EnableDebugLogging = !ThreadSafeLog.EnableDebugLogging;
+                MyAPIGateway.Utilities.ShowMessage("Block Culling", $"Debug logging {(ThreadSafeLog.EnableDebugLogging ? "enabled" : "disabled")}");
+                sendToOthers = false;
+            }
+        }
+
         public override void LoadData()
         {
             if (MyAPIGateway.Utilities.IsDedicated)
@@ -42,9 +63,12 @@ namespace Scripts.BlockCulling
             if (MyAPIGateway.Utilities.IsDedicated)
                 return;
 
+            MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
+
             MyAPIGateway.Entities.OnEntityAdd -= OnEntityAdd;
             ThreadSafeLog.Close();
             Instance = null;
+
         }
 
         public override void UpdateBeforeSimulation()
@@ -57,6 +81,13 @@ namespace Scripts.BlockCulling
             stopwatch.Stop();
             _performanceMonitor.RecordSyncOperation(stopwatch.ElapsedMilliseconds);
             _performanceMonitor.Update();
+
+            _reportCounter++;
+            if (_reportCounter >= REPORT_INTERVAL)
+            {
+                GenerateCulledBlocksReport();
+                _reportCounter = 0;
+            }
         }
 
         public override void UpdateAfterSimulation()
@@ -103,6 +134,33 @@ namespace Scripts.BlockCulling
             }
         }
 
+        private void GenerateCulledBlocksReport()
+        {
+            if (!ThreadSafeLog.EnableDebugLogging) return;
+
+            int totalCulledBlocks = 0;
+            int totalGrids = 0;
+            StringBuilder report = new StringBuilder("BLOCK CULLING REPORT:\n");
+
+            foreach (var gridBlocks in _culledBlocks)
+            {
+                if (gridBlocks.Key?.EntityId != 0)  // Filter out any potentially invalid grids
+                {
+                    int culledCount = gridBlocks.Value.Count;
+                    if (culledCount > 0)
+                    {
+                        totalGrids++;
+                        totalCulledBlocks += culledCount;
+                        report.AppendFormat("• Grid {0}: {1} blocks culled\n", gridBlocks.Key.EntityId, culledCount);
+                    }
+                }
+            }
+
+            report.AppendFormat("TOTAL: {0} blocks across {1} grids", totalCulledBlocks, totalGrids);
+
+            ThreadSafeLog.EnqueueMessageDebug(report.ToString());
+        }
+
         private void OnEntityAdd(IMyEntity entity)
         {
             var grid = entity as IMyCubeGrid;
@@ -121,6 +179,8 @@ namespace Scripts.BlockCulling
             {
                 SetTransparencyAsync(new SafeSlimBlockRef(block.SlimBlock));
             }
+
+            ThreadSafeLog.EnqueueMessageDebug($"Started culling for Grid {grid.EntityId}");
         }
 
         private void OnBlockPlace(IMySlimBlock slimBlock)
@@ -149,6 +209,8 @@ namespace Scripts.BlockCulling
                 _unCulledGrids.Remove(grid);
                 OnGridCullingCompleted?.Invoke(grid);
             }
+
+            ThreadSafeLog.EnqueueMessageDebug($"Grid {grid.EntityId} removed, stopped culling");
         }
 
         private void SetTransparencyAsync(SafeSlimBlockRef slimBlockRef, bool recursive = true, bool deepRecurse = true)
@@ -170,17 +232,36 @@ namespace Scripts.BlockCulling
                     var blockSlimNeighbors = new HashSet<IMySlimBlock>();
                     bool shouldCullBlock = BlockEligibleForCulling(slimBlock, ref blockSlimNeighbors);
 
+                    bool wasAlreadyCulled = false;
+                    bool blockAdded = false;
+
                     MainThreadDispatcher.Enqueue(() =>
                     {
                         if (block?.CubeGrid != null)
                         {
+                            wasAlreadyCulled = _culledBlocks[block.CubeGrid].Contains(block);
+
                             if (!_unCulledGrids.Contains(block.CubeGrid))
                                 block.Visible = !shouldCullBlock;
 
-                            if (shouldCullBlock)
+                            if (shouldCullBlock && !wasAlreadyCulled)
+                            {
                                 _culledBlocks[block.CubeGrid].Add(block);
-                            else
+                                blockAdded = true;
+                            }
+                            else if (!shouldCullBlock)
+                            {
                                 _culledBlocks[block.CubeGrid].Remove(block);
+                            }
+
+                            // Log only when a block's culling status changes
+                            if ((blockAdded || (!shouldCullBlock && wasAlreadyCulled)) && ThreadSafeLog.EnableDebugLogging)
+                            {
+                                int totalCulledBlocks = _culledBlocks[block.CubeGrid].Count;
+                                ThreadSafeLog.EnqueueMessageDebug($"Grid {block.CubeGrid.EntityId}: " +
+                                    $"{(blockAdded ? "Culled" : "Unculled")} block at {slimBlock.Position}. " +
+                                    $"Total culled: {totalCulledBlocks}");
+                            }
                         }
                     });
 
@@ -233,7 +314,10 @@ namespace Scripts.BlockCulling
                     slimNeighborsContributor.Add(slimNeighbor);
             }
 
-            return slimNeighborsContributor.Count == GetBlockFaceCount(block);
+            bool result = slimNeighborsContributor.Count == GetBlockFaceCount(block);
+            //ThreadSafeLog.EnqueueMessageDebug($"Block {block.EntityId} eligible for culling: {result}");
+            //oh god don't enable this
+            return result;
         }
 
         private bool ConnectsWithFullMountPoint(IMySlimBlock thisBlock, IMySlimBlock slimNeighbor)

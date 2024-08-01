@@ -232,36 +232,17 @@ namespace Scripts.BlockCulling
                     var blockSlimNeighbors = new HashSet<IMySlimBlock>();
                     bool shouldCullBlock = BlockEligibleForCulling(slimBlock, ref blockSlimNeighbors);
 
-                    bool wasAlreadyCulled = false;
-                    bool blockAdded = false;
-
                     MainThreadDispatcher.Enqueue(() =>
                     {
                         if (block?.CubeGrid != null)
                         {
-                            wasAlreadyCulled = _culledBlocks[block.CubeGrid].Contains(block);
-
                             if (!_unCulledGrids.Contains(block.CubeGrid))
                                 block.Visible = !shouldCullBlock;
 
-                            if (shouldCullBlock && !wasAlreadyCulled)
-                            {
+                            if (shouldCullBlock)
                                 _culledBlocks[block.CubeGrid].Add(block);
-                                blockAdded = true;
-                            }
-                            else if (!shouldCullBlock)
-                            {
+                            else
                                 _culledBlocks[block.CubeGrid].Remove(block);
-                            }
-
-                            // Log only when a block's culling status changes
-                            if ((blockAdded || (!shouldCullBlock && wasAlreadyCulled)) && ThreadSafeLog.EnableDebugLogging)
-                            {
-                                int totalCulledBlocks = _culledBlocks[block.CubeGrid].Count;
-                                ThreadSafeLog.EnqueueMessageDebug($"Grid {block.CubeGrid.EntityId}: " +
-                                    $"{(blockAdded ? "Culled" : "Unculled")} block at {slimBlock.Position}. " +
-                                    $"Total culled: {totalCulledBlocks}");
-                            }
                         }
                     });
 

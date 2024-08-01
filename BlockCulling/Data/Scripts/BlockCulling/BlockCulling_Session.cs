@@ -43,6 +43,7 @@ namespace Scripts.BlockCulling
                 return;
 
             MyAPIGateway.Entities.OnEntityAdd -= OnEntityAdd;
+            ThreadSafeLog.Close();
             Instance = null;
         }
 

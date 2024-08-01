@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using Sandbox.ModAPI;
 using VRage.Game.ModAPI;
@@ -12,22 +13,62 @@ namespace Scripts.BlockCulling
     {
         private static readonly object _lock = new object();
         private static readonly Queue<string> _messageQueue = new Queue<string>();
+        private static TextWriter _writer;
+        private const string LOG_FILE = "BlockCulling_Debug.log";
+
+        static ThreadSafeLog()
+        {
+            try
+            {
+                _writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(LOG_FILE, typeof(ThreadSafeLog));
+            }
+            catch (Exception e)
+            {
+                MyLog.Default.WriteLineAndConsole($"BlockCulling: Failed to initialize debug log: {e.Message}");
+            }
+        }
 
         public static void EnqueueMessage(string message)
         {
+            if (string.IsNullOrEmpty(message)) return;
+
             lock (_lock)
             {
-                _messageQueue.Enqueue(message);
+                _messageQueue.Enqueue($"[{DateTime.Now:HH:mm:ss.fff}] {message}");
             }
         }
 
         public static void ProcessLogQueue()
         {
+            if (_writer == null) return;  // If we couldn't initialize, don't try to write
+
             lock (_lock)
             {
                 while (_messageQueue.Count > 0)
                 {
-                    MyLog.Default.WriteLineAndConsole($"[BlockCulling]: {_messageQueue.Dequeue()}");
+                    string msg = _messageQueue.Dequeue();
+                    try
+                    {
+                        _writer.WriteLine(msg);
+                        _writer.Flush();  // Make sure it's written immediately
+                    }
+                    catch (Exception e)
+                    {
+                        MyLog.Default.WriteLineAndConsole($"BlockCulling: Failed writing to debug log: {e.Message}");
+                    }
+                }
+            }
+        }
+
+        public static void Close()
+        {
+            lock (_lock)
+            {
+                if (_writer != null)
+                {
+                    _writer.Flush();
+                    _writer.Close();
+                    _writer = null;
                 }
             }
         }

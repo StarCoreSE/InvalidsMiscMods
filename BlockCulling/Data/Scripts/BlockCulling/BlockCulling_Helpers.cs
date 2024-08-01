@@ -14,9 +14,7 @@ namespace Scripts.BlockCulling
         private static readonly object _lock = new object();
         private static readonly Queue<string> _messageQueue = new Queue<string>();
         private static TextWriter _writer;
-        private const string LOG_FILE = "BlockCulling_Debug.log";
         public static bool EnableDebugLogging = false;
-        private const int MAX_LOG_FILES = 10;
 
         static ThreadSafeLog()
         {

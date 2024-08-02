@@ -44,6 +44,13 @@ namespace Scripts.BlockCulling
             if (messageText.StartsWith("/bcdebug"))
             {
                 ThreadSafeLog.EnableDebugLogging = !ThreadSafeLog.EnableDebugLogging;
+
+                if (ThreadSafeLog.EnableDebugLogging)
+                {
+                    // Log a message indicating logging has started
+                    ThreadSafeLog.EnqueueMessage($"Debug logging enabled at {DateTime.Now}");
+                }
+
                 MyAPIGateway.Utilities.ShowMessage("Block Culling", $"Debug logging {(ThreadSafeLog.EnableDebugLogging ? "enabled" : "disabled")}");
                 sendToOthers = false;
             }
@@ -76,17 +83,23 @@ namespace Scripts.BlockCulling
             var stopwatch = Stopwatch.StartNew();
 
             _taskScheduler.ProcessTasks();
-            ThreadSafeLog.ProcessLogQueue();
+            if (ThreadSafeLog.EnableDebugLogging)
+            {
+                ThreadSafeLog.ProcessLogQueue();
+            }
 
             stopwatch.Stop();
             _performanceMonitor.RecordSyncOperation(stopwatch.ElapsedMilliseconds);
             _performanceMonitor.Update();
 
-            _reportCounter++;
-            if (_reportCounter >= REPORT_INTERVAL)
+            if (ThreadSafeLog.EnableDebugLogging)
             {
-                GenerateCulledBlocksReport();
-                _reportCounter = 0;
+                _reportCounter++;
+                if (_reportCounter >= REPORT_INTERVAL)
+                {
+                    GenerateCulledBlocksReport();
+                    _reportCounter = 0;
+                }
             }
         }
 

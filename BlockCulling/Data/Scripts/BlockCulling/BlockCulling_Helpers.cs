@@ -16,33 +16,75 @@ namespace Scripts.BlockCulling
         private static TextWriter _writer;
         public static bool EnableDebugLogging = false;
 
-        static ThreadSafeLog()
+        private static bool _writerInitialized;  // Add this!
+
+        private static TextWriter Writer
         {
-            try
+            get
             {
-                string logFileName = GenerateLogFileName();
-                _writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(logFileName, typeof(ThreadSafeLog));
-                EnqueueMessage($"Starting new debug log for session: {logFileName}");
+                if (_writer == null && EnableDebugLogging)
+                {
+                    lock (_lock)
+                    {
+                        if (_writer == null && EnableDebugLogging)
+                        {
+                            try
+                            {
+                                string logFileName = GenerateLogFileName();
+                                _writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(logFileName, typeof(ThreadSafeLog));
+                                _writer.WriteLine("Debug log initialized: {0}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                                _writer.Flush();
+                            }
+                            catch (Exception e)
+                            {
+                                MyLog.Default.WriteLineAndConsole(string.Format("BlockCulling: Failed to initialize debug log: {0}", e.Message));
+                            }
+                        }
+                    }
+                }
+                return _writer;
             }
-            catch (Exception e)
+        }
+
+        private static TextWriter EnsureWriter()  // Method, not Property!
+        {
+            if (!EnableDebugLogging) return null;
+
+            lock (_lock)  // Single, always-respected lock
             {
-                MyLog.Default.WriteLineAndConsole($"BlockCulling: Failed to initialize debug log: {e.Message}");
+                if (_writer == null && !_writerInitialized && EnableDebugLogging)
+                {
+                    try
+                    {
+                        _writerInitialized = true;  // Important! Set this first.
+                        string logFileName = GenerateLogFileName();
+                        _writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(logFileName, typeof(ThreadSafeLog));
+                        _writer.WriteLine("Debug log initialized: {0}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                        _writer.Flush();
+                    }
+                    catch (Exception e)
+                    {
+                        _writerInitialized = false;  // Reset if initialization failed
+                        MyLog.Default.WriteLineAndConsole(string.Format("BlockCulling: Failed to initialize debug log: {0}", e.Message));
+                    }
+                }
+                return _writer;  // Always return from within lock
             }
         }
 
         private static string GenerateLogFileName()
         {
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            return $"BlockCulling_Debug_{timestamp}.log";
+            return string.Format("BlockCulling_Debug_{0}.log", timestamp);
         }
 
         public static void EnqueueMessage(string message)
         {
-            if (string.IsNullOrEmpty(message)) return;
+            if (!EnableDebugLogging || string.IsNullOrEmpty(message)) return;
 
             lock (_lock)
             {
-                _messageQueue.Enqueue($"[{DateTime.Now:HH:mm:ss.fff}] {message}");
+                _messageQueue.Enqueue(string.Format("[{0:HH:mm:ss.fff}] {1}", DateTime.Now, message));
             }
         }
 
@@ -50,27 +92,30 @@ namespace Scripts.BlockCulling
         {
             if (EnableDebugLogging)
             {
-                EnqueueMessage($"[DEBUG] {message}");
+                EnqueueMessage(string.Format("[DEBUG] {0}", message));
             }
         }
 
         public static void ProcessLogQueue()
         {
-            if (_writer == null) return;  // If we couldn't initialize, don't try to write
+            if (!EnableDebugLogging) return;
 
-            lock (_lock)
+            lock (_lock)  // Single lock-context for whole method
             {
+                TextWriter writer = EnsureWriter();  // Get writer under same lock as queue processing
+                if (writer == null) return;
+
                 while (_messageQueue.Count > 0)
                 {
                     string msg = _messageQueue.Dequeue();
                     try
                     {
-                        _writer.WriteLine(msg);
-                        _writer.Flush();  // Make sure it's written immediately
+                        writer.WriteLine(msg);
+                        writer.Flush();
                     }
                     catch (Exception e)
                     {
-                        MyLog.Default.WriteLineAndConsole($"BlockCulling: Failed writing to debug log: {e.Message}");
+                        MyLog.Default.WriteLineAndConsole(string.Format("BlockCulling: Failed writing to debug log: {0}", e.Message));
                     }
                 }
             }
@@ -89,7 +134,6 @@ namespace Scripts.BlockCulling
             }
         }
     }
-
     public static class MainThreadDispatcher
     {
         private static readonly object _lock = new object();

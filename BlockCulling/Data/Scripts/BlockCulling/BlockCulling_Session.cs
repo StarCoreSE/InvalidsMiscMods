@@ -22,6 +22,7 @@ namespace Scripts.BlockCulling
         private readonly Dictionary<IMyCubeGrid, HashSet<IMyCubeBlock>> _culledBlocks = new Dictionary<IMyCubeGrid, HashSet<IMyCubeBlock>>();
         private readonly HashSet<IMyCubeGrid> _unCulledGrids = new HashSet<IMyCubeGrid>();
         private readonly List<IMyCubeBlock> _queuedBlockCulls = new List<IMyCubeBlock>();
+        private readonly List<IMyCubeBlock> _queuedBlockUnculls = new List<IMyCubeBlock>();
         private readonly TaskScheduler _taskScheduler = new TaskScheduler();
         private readonly PerformanceMonitor _performanceMonitor = new PerformanceMonitor();
 
@@ -149,12 +150,21 @@ namespace Scripts.BlockCulling
 
         private void ProcessQueuedBlockCulls()
         {
-            int count = Math.Min(_queuedBlockCulls.Count, MaxBlocksCulledPerTick);
-            for (int i = 0; i < count; i++)
+            // Process blocks becoming invisible (culling)
+            int cullCount = Math.Min(_queuedBlockCulls.Count, MaxBlocksCulledPerTick);
+            for (int i = 0; i < cullCount; i++)
             {
                 _queuedBlockCulls[i].Visible = false;
             }
-            _queuedBlockCulls.RemoveRange(0, count);
+            _queuedBlockCulls.RemoveRange(0, cullCount);
+
+            // Process blocks becoming visible again (unculling)
+            int uncullCount = Math.Min(_queuedBlockUnculls.Count, MaxBlocksCulledPerTick - cullCount);  // Use remaining "quota"
+            for (int i = 0; i < uncullCount; i++)
+            {
+                _queuedBlockUnculls[i].Visible = true;
+            }
+            _queuedBlockUnculls.RemoveRange(0, uncullCount);
         }
 
         private void UpdateGridCulling()
@@ -173,7 +183,7 @@ namespace Scripts.BlockCulling
                 {
                     foreach (var block in _culledBlocks[grid])
                     {
-                        block.Visible = true;
+                        _queuedBlockUnculls.AddRange(_culledBlocks[grid]); // Places blocks in queue instead
                     }
                 }
             }

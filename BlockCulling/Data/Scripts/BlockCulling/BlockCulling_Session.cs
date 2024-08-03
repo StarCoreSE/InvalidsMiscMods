@@ -33,6 +33,10 @@ namespace Scripts.BlockCulling
         private int _reportCounter = 0;
         private const int REPORT_INTERVAL = 600; // Generate report every 10 seconds (60 ticks per second)
 
+        private ModConfig modConfig;
+        public bool ModEnabled => modConfig.ModEnabled;
+
+
         public override void Init(MyObjectBuilder_SessionComponent sessionComponent)
         {
             base.Init(sessionComponent);
@@ -54,6 +58,27 @@ namespace Scripts.BlockCulling
                 MyAPIGateway.Utilities.ShowMessage("Block Culling", $"Debug logging {(ThreadSafeLog.EnableDebugLogging ? "enabled" : "disabled")}");
                 sendToOthers = false;
             }
+
+            else if (messageText.StartsWith("/bcenable"))
+            {
+                modConfig.ModEnabled = true;
+                modConfig.Save();
+                MyAPIGateway.Utilities.ShowMessage("BlockCulling", "Block culling enabled!");
+                sendToOthers = false;
+            }
+            else if (messageText.StartsWith("/bcdisable"))
+            {
+                modConfig.ModEnabled = false;
+                modConfig.Save();
+                MyAPIGateway.Utilities.ShowMessage("BlockCulling", "Block culling disabled!");
+                sendToOthers = false;
+            }
+            else if (messageText.StartsWith("/bcstatus"))
+            {
+                string status = modConfig.ModEnabled ? "enabled" : "disabled";
+                MyAPIGateway.Utilities.ShowMessage("BlockCulling", $"Block culling is {status}");
+                sendToOthers = false;
+            }
         }
 
         public override void LoadData()
@@ -63,6 +88,9 @@ namespace Scripts.BlockCulling
 
             Instance = this;
             MyAPIGateway.Entities.OnEntityAdd += OnEntityAdd;
+
+            modConfig = ModConfig.Load();
+            ThreadSafeLog.EnqueueMessage($"Block Culling mod loaded. Enabled: {modConfig.ModEnabled}");
         }
 
         protected override void UnloadData()
@@ -80,6 +108,8 @@ namespace Scripts.BlockCulling
 
         public override void UpdateBeforeSimulation()
         {
+            if (!modConfig.ModEnabled) return;
+
             var stopwatch = Stopwatch.StartNew();
 
             _taskScheduler.ProcessTasks();
@@ -105,6 +135,8 @@ namespace Scripts.BlockCulling
 
         public override void UpdateAfterSimulation()
         {
+            if (!modConfig.ModEnabled) return;
+
             var stopwatch = Stopwatch.StartNew();
 
             MainThreadDispatcher.Update();

@@ -168,7 +168,7 @@ namespace Scripts.BlockCulling
 
     public class TaskScheduler
     {
-        private const int MAX_TASKS_PER_FRAME = 10;
+        private const int MAX_TASKS_PER_FRAME = 50; //at 10 it takes 5.5 minutes on a 33k reactor grid. we can speed that up
         private readonly object _lock = new object();
         private readonly Queue<Action> _taskQueue = new Queue<Action>();
 
@@ -219,6 +219,8 @@ namespace Scripts.BlockCulling
         private long _syncTimeTotal;
         private long _asyncTimeTotal;
         private int _tasksProcessedTotal;
+        private long _blocksCulledTotal;   // New!
+        private long _blocksUnculledTotal; // New!
 
         public void RecordSyncOperation(long milliseconds) => Interlocked.Add(ref _syncTimeTotal, milliseconds);
         public void RecordAsyncOperation(long milliseconds) => Interlocked.Add(ref _asyncTimeTotal, milliseconds);
@@ -233,16 +235,25 @@ namespace Scripts.BlockCulling
             }
         }
 
+        public void RecordBlocksCulled(int count) => Interlocked.Add(ref _blocksCulledTotal, count);
+        public void RecordBlocksUnculled(int count) => Interlocked.Add(ref _blocksUnculledTotal, count);
+
         private void GenerateReport()
         {
             double syncTimeAvg = (double)_syncTimeTotal / REPORT_INTERVAL;
             double asyncTimeAvg = (double)_asyncTimeTotal / REPORT_INTERVAL;
             double tasksPerSecond = (double)_tasksProcessedTotal / (REPORT_INTERVAL / 60.0);
+            double blocksCulled = Interlocked.Read(ref _blocksCulledTotal);
+            double blocksUnculled = Interlocked.Read(ref _blocksUnculledTotal);
 
             string report = $"Performance Report (Last {REPORT_INTERVAL} ticks):\n" +
                             $"Avg Sync Time: {syncTimeAvg:F2}ms\n" +
                             $"Avg Async Time: {asyncTimeAvg:F2}ms\n" +
-                            $"Tasks/Second: {tasksPerSecond:F2}";
+                            $"Tasks/Second: {tasksPerSecond:F2} + " +
+                            $"Blocks Culled: {blocksCulled:F2}\n" +  // New!
+                            $"Blocks Unculled: {blocksUnculled:F2}"; // New!
+
+
 
             ThreadSafeLog.EnqueueMessage(report);
         }
@@ -253,6 +264,8 @@ namespace Scripts.BlockCulling
             Interlocked.Exchange(ref _syncTimeTotal, 0);
             Interlocked.Exchange(ref _asyncTimeTotal, 0);
             Interlocked.Exchange(ref _tasksProcessedTotal, 0);
+            Interlocked.Exchange(ref _blocksCulledTotal, 0);
+            Interlocked.Exchange(ref _blocksUnculledTotal, 0);
         }
     }
 }

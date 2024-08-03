@@ -77,7 +77,7 @@ namespace Scripts.BlockCulling
 
         public override void LoadData()
         {
-            if (MyAPIGateway.Session.IsServer) return;
+            if (MyAPIGateway.Session.IsServer && MyAPIGateway.Utilities.IsDedicated) return;
             _isClient = true;  // HERE: Set a flag that we are, in fact, a client.
 
             Instance = this;
@@ -88,7 +88,7 @@ namespace Scripts.BlockCulling
 
         protected override void UnloadData()
         {
-            if (MyAPIGateway.Session.IsServer) return;
+            if (MyAPIGateway.Session.IsServer && MyAPIGateway.Utilities.IsDedicated) return;
             MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
             MyAPIGateway.Entities.OnEntityAdd -= OnEntityAdd;
             ThreadSafeLog.Close();

@@ -129,14 +129,57 @@ namespace Scripts.BlockCulling
 
         public override void UpdateAfterSimulation()
         {
+            if (modConfig == null)
+            {
+                ThreadSafeLog.EnqueueMessage("modConfig is null in UpdateAfterSimulation.");
+                return;
+            }
+
             if (!modConfig.ModEnabled) return;
 
             var stopwatch = Stopwatch.StartNew();
-            MainThreadDispatcher.Update();
-            ProcessQueuedBlockCulls();
-            UpdateGridCulling();
+
+            // Check if MainThreadDispatcher is null and log a message if it is
+            try
+            {
+                MainThreadDispatcher.Update();
+            }
+            catch (Exception e)
+            {
+                ThreadSafeLog.EnqueueMessage($"Exception in MainThreadDispatcher.Update: {e}");
+            }
+
+            // Check and handle exceptions in ProcessQueuedBlockCulls
+            try
+            {
+                ProcessQueuedBlockCulls();
+            }
+            catch (Exception e)
+            {
+                ThreadSafeLog.EnqueueMessage($"Exception in ProcessQueuedBlockCulls: {e}");
+            }
+
+            // Check and handle exceptions in UpdateGridCulling
+            try
+            {
+                UpdateGridCulling();
+            }
+            catch (Exception e)
+            {
+                ThreadSafeLog.EnqueueMessage($"Exception in UpdateGridCulling: {e}");
+            }
+
             stopwatch.Stop();
-            _performanceMonitor.RecordSyncOperation(stopwatch.ElapsedMilliseconds);
+
+            // Check if _performanceMonitor is null and log a message if it is
+            if (_performanceMonitor == null)
+            {
+                ThreadSafeLog.EnqueueMessage("_performanceMonitor is null in UpdateAfterSimulation.");
+            }
+            else
+            {
+                _performanceMonitor.RecordSyncOperation(stopwatch.ElapsedMilliseconds);
+            }
         }
 
         private void ProcessQueuedBlockCulls()

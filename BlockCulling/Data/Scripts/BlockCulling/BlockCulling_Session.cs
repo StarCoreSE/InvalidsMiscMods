@@ -183,7 +183,7 @@ namespace Scripts.BlockCulling
                 {
                     foreach (var block in _culledBlocks[grid])
                     {
-                        block.Visible = true;
+                        _queuedBlockUnculls.AddRange(_culledBlocks[grid]); // Places blocks in queue instead
                     }
                 }
             }

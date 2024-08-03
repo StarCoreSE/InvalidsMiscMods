@@ -141,7 +141,7 @@ namespace Scripts.BlockCulling
             var stopwatch = Stopwatch.StartNew();
 
             MainThreadDispatcher.Update();
-            ProcessQueuedBlockCulls();
+            ProcessQueuedBlockCulls();  // This ensures visibility changes are spread across ticks
             UpdateGridCulling();
 
             stopwatch.Stop();
@@ -150,8 +150,10 @@ namespace Scripts.BlockCulling
 
         private void ProcessQueuedBlockCulls()
         {
+            int maxProcessPerTick = MaxBlocksCulledPerTick; // You can use the same limit or define a new one for unculling
+
             // Process blocks becoming invisible (culling)
-            int cullCount = Math.Min(_queuedBlockCulls.Count, MaxBlocksCulledPerTick);
+            int cullCount = Math.Min(_queuedBlockCulls.Count, maxProcessPerTick / 2); // Allocate half capacity for culling
             for (int i = 0; i < cullCount; i++)
             {
                 _queuedBlockCulls[i].Visible = false;
@@ -159,7 +161,7 @@ namespace Scripts.BlockCulling
             _queuedBlockCulls.RemoveRange(0, cullCount);
 
             // Process blocks becoming visible again (unculling)
-            int uncullCount = Math.Min(_queuedBlockUnculls.Count, MaxBlocksCulledPerTick - cullCount);  // Use remaining "quota"
+            int uncullCount = Math.Min(_queuedBlockUnculls.Count, maxProcessPerTick - cullCount); // Use remaining capacity for unculling
             for (int i = 0; i < uncullCount; i++)
             {
                 _queuedBlockUnculls[i].Visible = true;
@@ -179,11 +181,15 @@ namespace Scripts.BlockCulling
                         _queuedBlockCulls.AddRange(_culledBlocks[grid]);
                     }
                 }
-                else if (_unCulledGrids.Add(grid))
+                else
                 {
-                    foreach (var block in _culledBlocks[grid])
+                    if (_unCulledGrids.Add(grid))
                     {
-                        block.Visible = true;
+                        foreach (var block in _culledBlocks[grid])
+                        {
+                            if (!block.Visible) // Ensure we only queue invisible blocks to be made visible
+                                _queuedBlockUnculls.Add(block);
+                        }
                     }
                 }
             }

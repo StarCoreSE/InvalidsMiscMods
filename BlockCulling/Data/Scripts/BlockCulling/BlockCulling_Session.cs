@@ -73,18 +73,22 @@ namespace Scripts.BlockCulling
             }
         }
 
+        private bool _isClient = false;  // Add as a class field
+
         public override void LoadData()
         {
-            if (MyAPIGateway.Utilities.IsDedicated) return;
+            if (MyAPIGateway.Session.IsServer) return;
+            _isClient = true;  // HERE: Set a flag that we are, in fact, a client.
+
             Instance = this;
             MyAPIGateway.Entities.OnEntityAdd += OnEntityAdd;
-            modConfig = ModConfig.Load() ?? new ModConfig();
+            modConfig = ModConfig.Load();
             ThreadSafeLog.EnqueueMessage($"Block Culling mod loaded. Enabled: {modConfig.ModEnabled}");
         }
 
         protected override void UnloadData()
         {
-            if (MyAPIGateway.Utilities.IsDedicated) return;
+            if (MyAPIGateway.Session.IsServer) return;
             MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
             MyAPIGateway.Entities.OnEntityAdd -= OnEntityAdd;
             ThreadSafeLog.Close();
@@ -93,6 +97,7 @@ namespace Scripts.BlockCulling
 
         public override void UpdateBeforeSimulation()
         {
+
             if (modConfig == null || !modConfig.ModEnabled) return;
 
             try

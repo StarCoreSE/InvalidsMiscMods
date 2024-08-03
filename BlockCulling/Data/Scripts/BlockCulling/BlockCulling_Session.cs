@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using Sandbox.Definitions;
@@ -225,23 +226,32 @@ namespace Scripts.BlockCulling
         private void OnEntityAdd(IMyEntity entity)
         {
             var grid = entity as IMyCubeGrid;
-            if (grid?.Physics == null)
-                return;
+            if (grid?.Physics == null) return;
+
+            // IMPORTANT: Add this check
+            if (_culledBlocks.ContainsKey(grid))
+            {
+                ThreadSafeLog.EnqueueMessageDebug($"Grid {grid.EntityId} already exists. Re-initializing...");
+                _culledBlocks[grid].Clear();  // Reset!
+            }
+            else
+            {
+                _culledBlocks.Add(grid, new HashSet<IMyCubeBlock>());
+            }
 
             grid.OnBlockAdded += OnBlockPlace;
             grid.OnBlockRemoved += OnBlockRemove;
             grid.OnClose += OnGridRemove;
 
-            _culledBlocks.Add(grid, new HashSet<IMyCubeBlock>());
-
             OnGridCullingStarted?.Invoke(grid);
 
+            // Deep recurse! This is critical.
             foreach (var block in grid.GetFatBlocks<IMyCubeBlock>())
             {
-                SetTransparencyAsync(new SafeSlimBlockRef(block.SlimBlock));
+                SetTransparencyAsync(new SafeSlimBlockRef(block.SlimBlock), recursive: true, deepRecurse: true);  // Force deep recursion!
             }
 
-            ThreadSafeLog.EnqueueMessageDebug($"Started culling for Grid {grid.EntityId}");
+            ThreadSafeLog.EnqueueMessageDebug($"Started culling for Grid {grid.EntityId} ({grid.GetFatBlocks<IMyCubeBlock>().Count()} fat blocks)");
         }
 
         private void OnBlockPlace(IMySlimBlock slimBlock)

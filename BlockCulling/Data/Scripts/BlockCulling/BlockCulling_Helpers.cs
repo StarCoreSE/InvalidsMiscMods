@@ -168,7 +168,7 @@ namespace Scripts.BlockCulling
 
     public class TaskScheduler
     {
-        private const int MAX_TASKS_PER_FRAME = 10;
+        private const int MAX_TASKS_PER_FRAME = 50; //at 10 it takes 5.5 minutes on a 33k reactor grid. we can speed that up
         private readonly object _lock = new object();
         private readonly Queue<Action> _taskQueue = new Queue<Action>();
 

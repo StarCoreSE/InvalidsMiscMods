@@ -85,13 +85,15 @@ namespace Scripts.BlockCulling
 
         public override void LoadData()
         {
-            if (MyAPIGateway.Utilities.IsDedicated)
-                return;
-
+            if (MyAPIGateway.Utilities.IsDedicated) return;
             Instance = this;
             MyAPIGateway.Entities.OnEntityAdd += OnEntityAdd;
-
             modConfig = ModConfig.Load();
+            if (modConfig == null)
+            {
+                modConfig = new ModConfig();
+                ThreadSafeLog.EnqueueMessage("Failed to load config. Using default settings.");
+            }
             ThreadSafeLog.EnqueueMessage($"Block Culling mod loaded. Enabled: {modConfig.ModEnabled}");
         }
 
@@ -110,19 +112,27 @@ namespace Scripts.BlockCulling
 
         public override void UpdateBeforeSimulation()
         {
-            if (!modConfig.ModEnabled) return;
+            if (modConfig == null || !modConfig.ModEnabled) return;
 
             var stopwatch = Stopwatch.StartNew();
 
-            _taskScheduler.ProcessTasks();
+            if (_taskScheduler != null)
+            {
+                _taskScheduler.ProcessTasks();
+            }
+
             if (ThreadSafeLog.EnableDebugLogging)
             {
                 ThreadSafeLog.ProcessLogQueue();
             }
 
             stopwatch.Stop();
-            _performanceMonitor.RecordSyncOperation(stopwatch.ElapsedMilliseconds);
-            _performanceMonitor.Update();
+
+            if (_performanceMonitor != null)
+            {
+                _performanceMonitor.RecordSyncOperation(stopwatch.ElapsedMilliseconds);
+                _performanceMonitor.Update();
+            }
 
             if (ThreadSafeLog.EnableDebugLogging)
             {

@@ -19,25 +19,19 @@ namespace Scripts.BlockCulling
     public class BlockCulling : MySessionComponentBase
     {
         private static BlockCulling Instance;
-
         private readonly Dictionary<IMyCubeGrid, HashSet<IMyCubeBlock>> _culledBlocks = new Dictionary<IMyCubeGrid, HashSet<IMyCubeBlock>>();
         private readonly HashSet<IMyCubeGrid> _unCulledGrids = new HashSet<IMyCubeGrid>();
         private readonly List<IMyCubeBlock> _queuedBlockCulls = new List<IMyCubeBlock>();
         private readonly List<IMyCubeBlock> _queuedBlockUnculls = new List<IMyCubeBlock>();
         private readonly TaskScheduler _taskScheduler = new TaskScheduler();
         private readonly PerformanceMonitor _performanceMonitor = new PerformanceMonitor();
-
         private const int MaxBlocksCulledPerTick = 100;
-
         public static event Action<IMyCubeGrid> OnGridCullingStarted;
         public static event Action<IMyCubeGrid> OnGridCullingCompleted;
-
         private int _reportCounter = 0;
-        private const int REPORT_INTERVAL = 600; // Generate report every 10 seconds (60 ticks per second)
-
+        private const int REPORT_INTERVAL = 600;
         private ModConfig modConfig;
-        public bool ModEnabled => modConfig.ModEnabled;
-
+        public bool ModEnabled => modConfig?.ModEnabled ?? false;
 
         public override void Init(MyObjectBuilder_SessionComponent sessionComponent)
         {
@@ -50,17 +44,13 @@ namespace Scripts.BlockCulling
             if (messageText.StartsWith("/bcdebug"))
             {
                 ThreadSafeLog.EnableDebugLogging = !ThreadSafeLog.EnableDebugLogging;
-
                 if (ThreadSafeLog.EnableDebugLogging)
                 {
-                    // Log a message indicating logging has started
                     ThreadSafeLog.EnqueueMessage($"Debug logging enabled at {DateTime.Now}");
                 }
-
                 MyAPIGateway.Utilities.ShowMessage("Block Culling", $"Debug logging {(ThreadSafeLog.EnableDebugLogging ? "enabled" : "disabled")}");
                 sendToOthers = false;
             }
-
             else if (messageText.StartsWith("/bcenable"))
             {
                 modConfig.ModEnabled = true;
@@ -88,60 +78,47 @@ namespace Scripts.BlockCulling
             if (MyAPIGateway.Utilities.IsDedicated) return;
             Instance = this;
             MyAPIGateway.Entities.OnEntityAdd += OnEntityAdd;
-            modConfig = ModConfig.Load();
-            if (modConfig == null)
-            {
-                modConfig = new ModConfig();
-                ThreadSafeLog.EnqueueMessage("Failed to load config. Using default settings.");
-            }
+            modConfig = ModConfig.Load() ?? new ModConfig();
             ThreadSafeLog.EnqueueMessage($"Block Culling mod loaded. Enabled: {modConfig.ModEnabled}");
         }
 
         protected override void UnloadData()
         {
-            if (MyAPIGateway.Utilities.IsDedicated)
-                return;
-
+            if (MyAPIGateway.Utilities.IsDedicated) return;
             MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
-
             MyAPIGateway.Entities.OnEntityAdd -= OnEntityAdd;
             ThreadSafeLog.Close();
             Instance = null;
-
         }
 
         public override void UpdateBeforeSimulation()
         {
             if (modConfig == null || !modConfig.ModEnabled) return;
 
-            var stopwatch = Stopwatch.StartNew();
-
-            if (_taskScheduler != null)
+            try
             {
-                _taskScheduler.ProcessTasks();
-            }
-
-            if (ThreadSafeLog.EnableDebugLogging)
-            {
-                ThreadSafeLog.ProcessLogQueue();
-            }
-
-            stopwatch.Stop();
-
-            if (_performanceMonitor != null)
-            {
-                _performanceMonitor.RecordSyncOperation(stopwatch.ElapsedMilliseconds);
-                _performanceMonitor.Update();
-            }
-
-            if (ThreadSafeLog.EnableDebugLogging)
-            {
-                _reportCounter++;
-                if (_reportCounter >= REPORT_INTERVAL)
+                var stopwatch = Stopwatch.StartNew();
+                _taskScheduler?.ProcessTasks();
+                if (ThreadSafeLog.EnableDebugLogging)
                 {
-                    GenerateCulledBlocksReport();
-                    _reportCounter = 0;
+                    ThreadSafeLog.ProcessLogQueue();
                 }
+                stopwatch.Stop();
+                _performanceMonitor?.RecordSyncOperation(stopwatch.ElapsedMilliseconds);
+                _performanceMonitor?.Update();
+                if (ThreadSafeLog.EnableDebugLogging)
+                {
+                    _reportCounter++;
+                    if (_reportCounter >= REPORT_INTERVAL)
+                    {
+                        GenerateCulledBlocksReport();
+                        _reportCounter = 0;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                ThreadSafeLog.EnqueueMessage($"Exception in UpdateBeforeSimulation: {e}");
             }
         }
 
@@ -150,29 +127,23 @@ namespace Scripts.BlockCulling
             if (!modConfig.ModEnabled) return;
 
             var stopwatch = Stopwatch.StartNew();
-
             MainThreadDispatcher.Update();
-            ProcessQueuedBlockCulls();  // This ensures visibility changes are spread across ticks
+            ProcessQueuedBlockCulls();
             UpdateGridCulling();
-
             stopwatch.Stop();
             _performanceMonitor.RecordSyncOperation(stopwatch.ElapsedMilliseconds);
         }
 
         private void ProcessQueuedBlockCulls()
         {
-            int maxProcessPerTick = MaxBlocksCulledPerTick; // You can use the same limit or define a new one for unculling
-
-            // Process blocks becoming invisible (culling)
-            int cullCount = Math.Min(_queuedBlockCulls.Count, maxProcessPerTick / 2); // Allocate half capacity for culling
+            int maxProcessPerTick = MaxBlocksCulledPerTick;
+            int cullCount = Math.Min(_queuedBlockCulls.Count, maxProcessPerTick / 2);
             for (int i = 0; i < cullCount; i++)
             {
                 _queuedBlockCulls[i].Visible = false;
             }
             _queuedBlockCulls.RemoveRange(0, cullCount);
-
-            // Process blocks becoming visible again (unculling)
-            int uncullCount = Math.Min(_queuedBlockUnculls.Count, maxProcessPerTick - cullCount); // Use remaining capacity for unculling
+            int uncullCount = Math.Min(_queuedBlockUnculls.Count, maxProcessPerTick - cullCount);
             for (int i = 0; i < uncullCount; i++)
             {
                 _queuedBlockUnculls[i].Visible = true;
@@ -198,8 +169,7 @@ namespace Scripts.BlockCulling
                     {
                         foreach (var block in _culledBlocks[grid])
                         {
-                            if (!block.Visible) // Ensure we only queue invisible blocks to be made visible
-                                _queuedBlockUnculls.Add(block);
+                            if (!block.Visible) _queuedBlockUnculls.Add(block);
                         }
                     }
                 }
@@ -213,10 +183,9 @@ namespace Scripts.BlockCulling
             int totalCulledBlocks = 0;
             int totalGrids = 0;
             StringBuilder report = new StringBuilder("BLOCK CULLING REPORT:\n");
-
             foreach (var gridBlocks in _culledBlocks)
             {
-                if (gridBlocks.Key?.EntityId != 0)  // Filter out any potentially invalid grids
+                if (gridBlocks.Key?.EntityId != 0)
                 {
                     int culledCount = gridBlocks.Value.Count;
                     if (culledCount > 0)
@@ -227,9 +196,7 @@ namespace Scripts.BlockCulling
                     }
                 }
             }
-
             report.AppendFormat("TOTAL: {0} blocks across {1} grids", totalCulledBlocks, totalGrids);
-
             ThreadSafeLog.EnqueueMessageDebug(report.ToString());
         }
 
@@ -237,30 +204,23 @@ namespace Scripts.BlockCulling
         {
             var grid = entity as IMyCubeGrid;
             if (grid?.Physics == null) return;
-
-            // IMPORTANT: Add this check
             if (_culledBlocks.ContainsKey(grid))
             {
                 ThreadSafeLog.EnqueueMessageDebug($"Grid {grid.EntityId} already exists. Re-initializing...");
-                _culledBlocks[grid].Clear();  // Reset!
+                _culledBlocks[grid].Clear();
             }
             else
             {
                 _culledBlocks.Add(grid, new HashSet<IMyCubeBlock>());
             }
-
             grid.OnBlockAdded += OnBlockPlace;
             grid.OnBlockRemoved += OnBlockRemove;
             grid.OnClose += OnGridRemove;
-
             OnGridCullingStarted?.Invoke(grid);
-
-            // Deep recurse! This is critical.
             foreach (var block in grid.GetFatBlocks<IMyCubeBlock>())
             {
-                SetTransparencyAsync(new SafeSlimBlockRef(block.SlimBlock), recursive: true, deepRecurse: true);  // Force deep recursion!
+                SetTransparencyAsync(new SafeSlimBlockRef(block.SlimBlock), recursive: true, deepRecurse: true);
             }
-
             ThreadSafeLog.EnqueueMessageDebug($"Started culling for Grid {grid.EntityId} ({grid.GetFatBlocks<IMyCubeBlock>().Count()} fat blocks)");
         }
 
@@ -290,7 +250,6 @@ namespace Scripts.BlockCulling
                 _unCulledGrids.Remove(grid);
                 OnGridCullingCompleted?.Invoke(grid);
             }
-
             ThreadSafeLog.EnqueueMessageDebug($"Grid {grid.EntityId} removed, stopped culling");
         }
 
@@ -299,34 +258,23 @@ namespace Scripts.BlockCulling
             _taskScheduler.EnqueueTask(() =>
             {
                 var stopwatch = Stopwatch.StartNew();
-
                 try
                 {
                     IMySlimBlock slimBlock;
-                    if (!slimBlockRef.TryGetSlimBlock(out slimBlock))
-                        return;
-
+                    if (!slimBlockRef.TryGetSlimBlock(out slimBlock)) return;
                     IMyCubeBlock block = slimBlock.FatBlock;
-                    if (!recursive && block == null)
-                        return;
-
+                    if (!recursive && block == null) return;
                     var blockSlimNeighbors = new HashSet<IMySlimBlock>();
                     bool shouldCullBlock = BlockEligibleForCulling(slimBlock, ref blockSlimNeighbors);
-
                     MainThreadDispatcher.Enqueue(() =>
                     {
                         if (block?.CubeGrid != null)
                         {
-                            if (!_unCulledGrids.Contains(block.CubeGrid))
-                                block.Visible = !shouldCullBlock;
-
-                            if (shouldCullBlock)
-                                _culledBlocks[block.CubeGrid].Add(block);
-                            else
-                                _culledBlocks[block.CubeGrid].Remove(block);
+                            if (!_unCulledGrids.Contains(block.CubeGrid)) block.Visible = !shouldCullBlock;
+                            if (shouldCullBlock) _culledBlocks[block.CubeGrid].Add(block);
+                            else _culledBlocks[block.CubeGrid].Remove(block);
                         }
                     });
-
                     if (recursive)
                     {
                         foreach (var slimBlockN in blockSlimNeighbors)
@@ -339,7 +287,6 @@ namespace Scripts.BlockCulling
                 {
                     ThreadSafeLog.EnqueueMessage($"Exception in SetTransparencyAsync: {ex}");
                 }
-
                 stopwatch.Stop();
                 _performanceMonitor.RecordAsyncOperation(stopwatch.ElapsedMilliseconds);
             });
@@ -347,38 +294,24 @@ namespace Scripts.BlockCulling
 
         private bool BlockEligibleForCulling(IMySlimBlock slimBlock, ref HashSet<IMySlimBlock> blockSlimNeighbors)
         {
-            if (blockSlimNeighbors == null)
-                blockSlimNeighbors = new HashSet<IMySlimBlock>();
-
+            if (blockSlimNeighbors == null) blockSlimNeighbors = new HashSet<IMySlimBlock>();
             foreach (var blockPos in GetSurfacePositions(slimBlock))
             {
                 IMySlimBlock neighbor = slimBlock.CubeGrid.GetCubeBlock(blockPos);
-                if (neighbor != null)
-                    blockSlimNeighbors.Add(neighbor);
+                if (neighbor != null) blockSlimNeighbors.Add(neighbor);
             }
-
             IMyCubeBlock block = slimBlock?.FatBlock;
             if (block == null) return false;
-
             List<IMySlimBlock> slimNeighborsContributor = new List<IMySlimBlock>();
-
             foreach (var slimNeighbor in blockSlimNeighbors)
             {
                 int surroundingBlockCount = 0;
                 foreach (Vector3I surfacePosition in GetSurfacePositions(slimNeighbor))
-                    if (slimNeighbor.CubeGrid.CubeExists(surfacePosition))
-                        surroundingBlockCount++;
-
-                if (surroundingBlockCount != GetBlockFaceCount(slimNeighbor) && !ConnectsWithFullMountPoint(slimBlock, slimNeighbor))
-                    return false;
-
-                if (slimNeighbor.FatBlock == null || !(slimNeighbor.FatBlock is IMyLightingBlock || slimNeighbor.BlockDefinition.Id.SubtypeName.Contains("Window")))
-                    slimNeighborsContributor.Add(slimNeighbor);
+                    if (slimNeighbor.CubeGrid.CubeExists(surfacePosition)) surroundingBlockCount++;
+                if (surroundingBlockCount != GetBlockFaceCount(slimNeighbor) && !ConnectsWithFullMountPoint(slimBlock, slimNeighbor)) return false;
+                if (slimNeighbor.FatBlock == null || !(slimNeighbor.FatBlock is IMyLightingBlock || slimNeighbor.BlockDefinition.Id.SubtypeName.Contains("Window"))) slimNeighborsContributor.Add(slimNeighbor);
             }
-
             bool result = slimNeighborsContributor.Count == GetBlockFaceCount(block);
-            //ThreadSafeLog.EnqueueMessageDebug($"Block {block.EntityId} eligible for culling: {result}");
-            //oh god don't enable this
             return result;
         }
 
@@ -386,17 +319,12 @@ namespace Scripts.BlockCulling
         {
             Quaternion slimNeighborRotation;
             slimNeighbor.Orientation.GetQuaternion(out slimNeighborRotation);
-
             foreach (var mountPoint in ((MyCubeBlockDefinition)slimNeighbor.BlockDefinition).MountPoints)
             {
-                if (!Vector3I.BoxContains(thisBlock.Min, thisBlock.Max, (Vector3I)(slimNeighborRotation * mountPoint.Normal + slimNeighbor.Position)))
-                    continue;
-
+                if (!Vector3I.BoxContains(thisBlock.Min, thisBlock.Max, (Vector3I)(slimNeighborRotation * mountPoint.Normal + slimNeighbor.Position))) continue;
                 Vector3I mountSize = Vector3I.Abs(Vector3I.Round(mountPoint.End - mountPoint.Start));
-                if (mountSize.X + mountSize.Y + mountSize.Z == 2)
-                    return true;
+                if (mountSize.X + mountSize.Y + mountSize.Z == 2) return true;
             }
-
             return false;
         }
 
@@ -413,16 +341,13 @@ namespace Scripts.BlockCulling
         }
 
         private Vector3I[] _surfacePositions = new Vector3I[6];
+
         private Vector3I[] GetSurfacePositions(IMySlimBlock block)
         {
             Vector3I blockSize = Vector3I.Abs(block.Max - block.Min) + Vector3I.One;
-
             int faceCount = 2 * (blockSize.X * blockSize.Y + blockSize.Y * blockSize.Z + blockSize.Z * blockSize.X);
-            if (_surfacePositions.Length != faceCount)
-                _surfacePositions = new Vector3I[faceCount];
-
+            if (_surfacePositions.Length != faceCount) _surfacePositions = new Vector3I[faceCount];
             int idx = 0;
-
             for (int x = -1; x <= blockSize.X; x++)
             {
                 for (int y = -1; y <= blockSize.Y; y++)
@@ -432,25 +357,22 @@ namespace Scripts.BlockCulling
                         bool xLimit = (x == -1 || x == blockSize.X);
                         bool yLimit = (y == -1 || y == blockSize.Y);
                         bool zLimit = (z == -1 || z == blockSize.Z);
-                        if ((!xLimit && yLimit ^ zLimit) || (xLimit && !(yLimit || zLimit)))
-                            _surfacePositions[idx++] = block.Min + new Vector3I(x, y, z);
+                        if ((!xLimit && yLimit ^ zLimit) || (xLimit && !(yLimit || zLimit))) _surfacePositions[idx++] = block.Min + new Vector3I(x, y, z);
                     }
                 }
             }
-
             return _surfacePositions;
         }
     }
+
     public class SafeSlimBlockRef
     {
         private long _entityId;
         private Vector3I _position;
-
         public SafeSlimBlockRef(IMySlimBlock slimBlock)
         {
             SetSlimBlock(slimBlock);
         }
-
         public void SetSlimBlock(IMySlimBlock slimBlock)
         {
             if (slimBlock != null)
@@ -464,7 +386,6 @@ namespace Scripts.BlockCulling
                 _position = Vector3I.Zero;
             }
         }
-
         public bool TryGetSlimBlock(out IMySlimBlock slimBlock)
         {
             slimBlock = null;
@@ -476,5 +397,4 @@ namespace Scripts.BlockCulling
             return slimBlock != null;
         }
     }
-
 }

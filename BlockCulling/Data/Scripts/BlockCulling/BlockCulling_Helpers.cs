@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Threading;
 using Sandbox.ModAPI;
 using VRage.Game.ModAPI;
@@ -84,7 +85,8 @@ namespace Scripts.BlockCulling
 
             lock (_lock)
             {
-                _messageQueue.Enqueue(string.Format("[{0:HH:mm:ss.fff}] {1}", DateTime.Now, message));
+                // Only create formatted string if logging is enabled
+                _messageQueue.Enqueue(EnableDebugLogging ? string.Format("[{0:HH:mm:ss.fff}] {1}", DateTime.Now, message) : null);
             }
         }
 
@@ -240,22 +242,16 @@ namespace Scripts.BlockCulling
 
         private void GenerateReport()
         {
-            double syncTimeAvg = (double)_syncTimeTotal / REPORT_INTERVAL;
-            double asyncTimeAvg = (double)_asyncTimeTotal / REPORT_INTERVAL;
-            double tasksPerSecond = (double)_tasksProcessedTotal / (REPORT_INTERVAL / 60.0);
-            double blocksCulled = Interlocked.Read(ref _blocksCulledTotal);
-            double blocksUnculled = Interlocked.Read(ref _blocksUnculledTotal);
+            // Using StringBuilder instead of string concatenation reduces memory allocations
+            StringBuilder report = new StringBuilder();
+            report.AppendLine($"Performance Report (Last {REPORT_INTERVAL} ticks):")
+                  .AppendLine($"Avg Sync Time: {(double)_syncTimeTotal / REPORT_INTERVAL:F2}ms")
+                  .AppendLine($"Avg Async Time: {(double)_asyncTimeTotal / REPORT_INTERVAL:F2}ms")
+                  .AppendLine($"Tasks/Second: {(double)_tasksProcessedTotal / (REPORT_INTERVAL / 60.0):F2}")
+                  .AppendLine($"Blocks Culled: {Interlocked.Read(ref _blocksCulledTotal):F2}")
+                  .AppendLine($"Blocks Unculled: {Interlocked.Read(ref _blocksUnculledTotal):F2}");
 
-            string report = $"Performance Report (Last {REPORT_INTERVAL} ticks):\n" +
-                            $"Avg Sync Time: {syncTimeAvg:F2}ms\n" +
-                            $"Avg Async Time: {asyncTimeAvg:F2}ms\n" +
-                            $"Tasks/Second: {tasksPerSecond:F2} + " +
-                            $"Blocks Culled: {blocksCulled:F2}\n" +  // New!
-                            $"Blocks Unculled: {blocksUnculled:F2}"; // New!
-
-
-
-            ThreadSafeLog.EnqueueMessage(report);
+            ThreadSafeLog.EnqueueMessage(report.ToString());
         }
 
         private void ResetCounters()

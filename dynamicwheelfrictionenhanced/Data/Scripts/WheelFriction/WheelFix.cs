@@ -29,7 +29,7 @@ namespace WheelFix
         public const double ResistanceCoefficient = 1000d;
         public const float MaxFriction = 0.8f;
         public const float MaxStrength = 0.8f;
-        public const float TerrainSmoothingFactor = 0.1f;
+        public const float TerrainSmoothingFactor = 1f;
 
         public override void UpdateBeforeSimulation()
         {

@@ -20,13 +20,10 @@ public class CockpitHudDisplay : MySessionComponentBase
     private bool _isPlayerInCockpit = false;
     private PlanarMap _planarMap;
     private Legend _legend;
-    private IEnumerator<float> _spriteDrawStateMachine = null;
-    private bool _drawInProgress = false;
     private int _frameCounter = 0;
 
     private static HudAPIv2 _hudAPI;
-    private HudAPIv2.HUDMessage _hudMessage;
-    private StringBuilder _hudText;
+    private List<HudAPIv2.HUDMessage> _hudMessages = new List<HudAPIv2.HUDMessage>();
 
     public override void LoadData()
     {
@@ -35,15 +32,20 @@ public class CockpitHudDisplay : MySessionComponentBase
 
     protected override void UnloadData()
     {
-        PurgeHUDMessage();
+        ClearHUD();
     }
 
     private void InitializeHudAPI()
     {
         if (_hudAPI == null && !MyAPIGateway.Utilities.IsDedicated)
         {
-            _hudAPI = new HudAPIv2();
+            _hudAPI = new HudAPIv2(RegisterHudAPI);
         }
+    }
+
+    private void RegisterHudAPI()
+    {
+        MyLog.Default.WriteLine("HUD API Registered");
     }
 
     public override void UpdateAfterSimulation()
@@ -51,21 +53,22 @@ public class CockpitHudDisplay : MySessionComponentBase
         UpdatePlayerCockpitStatus();
 
         if (!_isPlayerInCockpit || _playerCockpit == null || !IsAPIAlive())
+        {
+            if (_frameCounter % 300 == 0) // Log every 300 frames
+            {
+                MyLog.Default.WriteLine($"Not drawing HUD. InCockpit: {_isPlayerInCockpit}, Cockpit: {_playerCockpit != null}, APIAlive: {IsAPIAlive()}");
+            }
             return;
+        }
 
         try
         {
-            // Rate limiting - update every 10th frame
+            // Rate limiting - update every 30th frame
             _frameCounter++;
-            if (_frameCounter % 10 == 0)
+            if (_frameCounter % 30 == 0)
             {
-                if (!_drawInProgress)
-                {
-                    _spriteDrawStateMachine = SpriteDrawStateMachine();
-                    _drawInProgress = true;
-                }
-
-                UpdateSpriteDrawStateMachine();
+                ClearHUD();
+                DrawHUD();
             }
         }
         catch (Exception e)
@@ -91,13 +94,14 @@ public class CockpitHudDisplay : MySessionComponentBase
         {
             _isPlayerInCockpit = false;
             _playerCockpit = null;
+            ClearHUD();
         }
     }
 
     private void InitializeMapAndLegend()
     {
         _planarMap = new PlanarMap(_playerCockpit.CubeGrid);
-        _legend = new Legend(0.5f); // Example font size
+        _legend = new Legend(0.5f);
         _legend.AddLegendItem("MISSING", "Damage", Color.Red);
         _legend.AddLegendItem("WEAPONS", "Weapons", Color.Orange);
         _legend.AddLegendItem("POWER", "Power", Color.Green);
@@ -105,30 +109,6 @@ public class CockpitHudDisplay : MySessionComponentBase
         _legend.AddLegendItem("THRUST", "Thrust", Color.Blue);
 
         StoreGridBlocks();
-    }
-
-    private void UpdateHUDMessage(Vector2D position, double scale)
-    {
-        if (_hudMessage == null)
-        {
-            _hudMessage = new HudAPIv2.HUDMessage(
-                Message: _hudText,
-                Origin: position,
-                Offset: null,
-                TimeToLive: -1,
-                Scale: scale,
-                HideHud: false,
-                Shadowing: true,
-                ShadowColor: Color.Black,
-                Blend: BlendTypeEnum.PostPP,
-                Font: "white"
-            );
-        }
-        else
-        {
-            _hudMessage.Message.Clear().Append(_hudText);
-            _hudMessage.Visible = true;
-        }
     }
 
     private void StoreGridBlocks()
@@ -145,73 +125,64 @@ public class CockpitHudDisplay : MySessionComponentBase
         _planarMap.CreateQuadTrees();
     }
 
-    private IEnumerator<float> SpriteDrawStateMachine()
+    private void DrawHUD()
     {
-        Vector2D hudPosition = new Vector2D(-0.1, -0.96); // Example position
-        float scale = 1.0f;
-        int totalNodes = _planarMap.QuadTreeXNormal.FinishedNodes.Count;
-        int nodesProcessed = 0;
-
-        if (_hudText == null)
+        if (_hudAPI == null || !_hudAPI.Heartbeat)
         {
-            _hudText = new StringBuilder(500);
+            MyLog.Default.WriteLine("HUD API is not ready");
+            return;
         }
-        _hudText.Clear();
+
+        Vector2D hudPosition = new Vector2D(-0.9, 0.5); // Adjust as needed
+        double scale = 0.5; // Adjust as needed
+
+        MyLog.Default.WriteLine($"Drawing HUD with {_planarMap.QuadTreeXNormal.FinishedNodes.Count} nodes");
 
         foreach (var leaf in _planarMap.QuadTreeXNormal.FinishedNodes)
         {
-            // Generate the text or sprite information
-            _hudText.AppendLine($"Block at {leaf.Min} - Status: {_planarMap.GetColor(leaf.Value)}");
-            nodesProcessed++;
-
-            // Call AddSpriteFromQuadTreeLeaf to render this leaf's information on the HUD
-            _planarMap.QuadTreeXNormal.AddSpriteFromQuadTreeLeaf(_hudAPI, leaf, hudPosition, scale);
-
-            // Yield after processing a portion of the nodes to avoid long frame times
-            if (nodesProcessed % 100 == 0)
-            {
-                UpdateHUDMessage(hudPosition, scale);
-                yield return nodesProcessed / (float)totalNodes;
-            }
+            AddSpriteFromQuadTreeLeaf(leaf, hudPosition, scale);
         }
 
-        // Draw the legend on the HUD after all blocks are processed
-        _hudText.AppendLine("Legend:");
-        _legend.GenerateSprites(null, Vector2.Zero, scale); // Example call; you can adjust this as needed
+        // Draw legend
+        Vector2D legendPosition = new Vector2D(0.8, 0.5); // Adjust as needed
+        _legend.GenerateSprites(_hudAPI, legendPosition, scale);
 
-        UpdateHUDMessage(hudPosition, scale);
-
-        yield return 1.0f;
+        MyLog.Default.WriteLine($"HUD drawn with {_hudMessages.Count} messages");
     }
 
-    private void UpdateSpriteDrawStateMachine()
+    private void AddSpriteFromQuadTreeLeaf(QuadTreeLeaf leaf, Vector2D position, double scale)
     {
-        if (_spriteDrawStateMachine == null)
-            return;
+        Color color = _planarMap.GetColor(leaf.Value);
+        Vector2D spritePosition = position + new Vector2D(leaf.Min.X * 0.005, -leaf.Min.Y * 0.005); // Adjusted scaling
 
-        bool moreInstructions = _spriteDrawStateMachine.MoveNext();
-        if (!moreInstructions)
-        {
-            _spriteDrawStateMachine.Dispose();
-            _spriteDrawStateMachine = null;
-            _drawInProgress = false;
-        }
+        var message = new HudAPIv2.HUDMessage(
+            Message: new StringBuilder($"<color={color.R},{color.G},{color.B},{color.A}>■</color>"),
+            Origin: spritePosition,
+            Scale: scale,
+            HideHud: false,
+            Shadowing: true,
+            ShadowColor: Color.Black,
+            Font: "Monospace",
+            Blend: BlendTypeEnum.PostPP
+        );
+
+        _hudMessages.Add(message);
     }
 
-    private void PurgeHUDMessage()
+    private void ClearHUD()
     {
-        if (_hudMessage != null)
+        foreach (var message in _hudMessages)
         {
-            _hudMessage.Visible = false;
-            _hudMessage.DeleteMessage();
-            _hudMessage = null;
+            message.Visible = false;
+            message.DeleteMessage();
         }
+        _hudMessages.Clear();
     }
 
     private static bool IsAPIAlive() => _hudAPI != null && _hudAPI.Heartbeat;
 }
 
-// Supporting Classes
+// Supporting Classes (unchanged)
 public class PlanarMap
 {
     public List<QuadTreeLeaf> FinishedNodes = new List<QuadTreeLeaf>();
@@ -229,7 +200,6 @@ public class PlanarMap
 
     private void InitializeDensityMap()
     {
-        // Calculate the dimensions for the density map based on the grid
         Vector3I gridMin = _grid.Min;
         Vector3I gridMax = _grid.Max;
 
@@ -246,19 +216,15 @@ public class PlanarMap
         _densityXNormal[diff.Y, diff.Z] += 1;
 
         _maxDensityX = Math.Max(_maxDensityX, _densityXNormal[diff.Y, diff.Z]);
-
-        // Add block info to the appropriate quadtree or other storage as needed
     }
 
     public void CreateQuadTrees()
     {
-        // Create and initialize the quadtree based on the collected data
         QuadTreeXNormal.Initialize(_densityXNormal, _maxDensityX);
     }
 
     public Color GetColor(int value)
     {
-        // Map the value to a color. This example uses a linear gradient between red and green.
         float lerpScale = (float)value / _maxDensityX;
         return Color.Lerp(Color.Red, Color.Green, lerpScale);
     }
@@ -273,7 +239,6 @@ public class QuadTree
         int height = densityMap.GetLength(0);
         int width = densityMap.GetLength(1);
 
-        // Loop through each cell in the density map
         for (int y = 0; y < height; y++)
         {
             for (int z = 0; z < width; z++)
@@ -281,39 +246,13 @@ public class QuadTree
                 int value = densityMap[y, z];
                 if (value > 0)
                 {
-                    // Create a new QuadTreeLeaf and add it to the FinishedNodes
                     Vector2I min = new Vector2I(y, z);
-                    Vector2I max = new Vector2I(y, z); // This can be expanded if you want larger blocks
+                    Vector2I max = new Vector2I(y, z);
 
                     FinishedNodes.Add(new QuadTreeLeaf(min, max, value));
                 }
             }
         }
-    }
-
-    public void AddSpriteFromQuadTreeLeaf(HudAPIv2 hudAPI, QuadTreeLeaf leaf, Vector2D position, float scale)
-    {
-        // Calculate color based on the leaf value (this is an example)
-        Color color = Color.Lerp(Color.Red, Color.Green, leaf.Value / 100f);
-
-        // Create and display the sprite based on the leaf's position and value
-        // For example, you could use the leaf's Min and Max to determine the position and size
-        StringBuilder spriteText = new StringBuilder();
-        spriteText.Append($"Block at ({leaf.Min.X}, {leaf.Min.Y}) - Value: {leaf.Value}");
-
-        // Display the sprite (adjust position and other parameters as needed)
-        var spriteMessage = new HudAPIv2.HUDMessage(
-            Message: spriteText,
-            Origin: position,
-            Offset: null,
-            TimeToLive: -1,
-            Scale: scale,
-            HideHud: false,
-            Shadowing: true,
-            ShadowColor: Color.Black,
-            Blend: BlendTypeEnum.PostPP,
-            Font: "white"
-        );
     }
 }
 
@@ -346,10 +285,23 @@ public class Legend
         _legendItems[key] = new LegendItem(name, color);
     }
 
-    public void GenerateSprites(object surf, Vector2 topLeftPos, float scale)
+    public void GenerateSprites(HudAPIv2 hudAPI, Vector2D topLeftPos, double scale)
     {
-        // Implement your legend drawing logic here
-        // This should create and render the legend on the HUD
+        float yOffset = 0;
+        foreach (var item in _legendItems.Values)
+        {
+            var message = new HudAPIv2.HUDMessage(
+                Message: new StringBuilder($"<color={item.Color.R},{item.Color.G},{item.Color.B},{item.Color.A}>■</color> {item.Name}"),
+                Origin: topLeftPos + new Vector2D(0, yOffset),
+                Scale: scale,
+                HideHud: false,
+                Shadowing: true,
+                ShadowColor: Color.Black,
+                Font: "Monospace",
+                Blend: BlendTypeEnum.PostPP
+            );
+            yOffset -= 0.05f;
+        }
     }
 }
 
@@ -372,6 +324,5 @@ public class BlockInfo
     public BlockInfo(ref Vector3I gridPosition, IMyCubeGrid grid)
     {
         GridPosition = gridPosition;
-        // Implement your block info storage logic
     }
 }

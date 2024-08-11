@@ -26,10 +26,10 @@ namespace WheelFix
             _suspension = (IMyMotorSuspension)this.Entity;
         }
 
-        public const double ResistanceCoefficient = 1000d;
-        public const float MaxFriction = 0.8f;
-        public const float MaxStrength = 0.8f;
-        public const float TerrainSmoothingFactor = 1f;
+        public const double ResistanceCoefficient = 100d;
+        public const float MaxFriction = 0.95f;
+        public const float MaxStrength = 0.95f;
+        public const float TerrainSmoothingFactor = 100f;
 
         public override void UpdateBeforeSimulation()
         {
@@ -45,7 +45,6 @@ namespace WheelFix
 
             var friction = Math.Min(_suspension.Friction / 100f, MaxFriction);
             var str = Math.Min(_suspension.Strength / 100f, MaxStrength);
-
             var num = 35.0d * ((double)(MyMath.FastTanH(6f * friction - 3f) / 2f) + 0.5);
             var num2 = (ResistanceCoefficient * str * distance.Length() * friction);
 
@@ -53,7 +52,7 @@ namespace WheelFix
 
             // Smooth out the funny terrain impacts by applying a small upward force
             var smoothingForce = TerrainSmoothingFactor * _suspension.PositionComp.WorldMatrixRef.Up;
-            grid.Physics.AddForce(MyPhysicsForceType.APPLY_WORLD_FORCE, smoothingForce, null, null);
+            grid.Physics.AddForce(MyPhysicsForceType.APPLY_WORLD_IMPULSE_AND_WORLD_ANGULAR_IMPULSE, smoothingForce, null, null);
 
             // Debug notifications (every 60 frames to reduce spam)
             if (_debugCounter++ % 60 == 0)

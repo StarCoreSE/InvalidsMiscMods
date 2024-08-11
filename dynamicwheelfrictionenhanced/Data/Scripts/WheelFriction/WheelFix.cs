@@ -22,8 +22,11 @@ namespace WheelFix
             this.NeedsUpdate |= VRage.ModAPI.MyEntityUpdateEnum.EACH_FRAME;
             _suspension = (IMyMotorSuspension)this.Entity;
 
-            // Register chat message handler
-            MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
+            if (!_isHandlerRegistered)
+            {
+                MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
+                _isHandlerRegistered = true;
+            }
         }
 
         private void OnMessageEntered(string messageText, ref bool sendToOthers)
@@ -58,7 +61,7 @@ namespace WheelFix
             var friction = MyMath.Clamp(_suspension.Friction / 100f, 0f, MaxFriction);
             var str = MyMath.Clamp(_suspension.Strength / 100f, 0f, MaxStrength);
             var num = 35.0d * ((double)(MyMath.FastTanH(6f * friction - 3f) / 2f) + 0.5);
-            var num2 = (ResistanceCoefficient * str * distance.Length() * friction);
+            var num2 = ResistanceCoefficient * str * distance.Length() * friction;
 
             grid.Physics.Friction = (float)(num + num2);
 
@@ -79,9 +82,19 @@ namespace WheelFix
         {
             base.UpdateAfterSimulation();
         }
+        private static bool _isHandlerRegistered = false;
 
 
-       
+
+        public override void Close()
+        {
+            if (_isHandlerRegistered)
+            {
+                MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
+                _isHandlerRegistered = false;
+            }
+            base.Close();
+        }
 
     }
 }

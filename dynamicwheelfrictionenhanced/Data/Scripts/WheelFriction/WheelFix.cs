@@ -9,19 +9,14 @@ using VRageMath;
 
 namespace WheelFix
 {
-    [MyEntityComponentDescriptor(typeof(MyObjectBuilder_MotorSuspension), false)]
-    public class WheelFix : MyGameLogicComponent
+    [MySessionComponentDescriptor(MyUpdateOrder.NoUpdate)]
+    public class WheelFixSession : MySessionComponentBase
     {
-        private IMyMotorSuspension _suspension;
-        private int _debugCounter = 0;
-        private bool _isEnabled = true; // Flag to control the toggling
+        public static bool IsEnabled = true;
+        private static bool _isHandlerRegistered = false;
 
-        public override void OnAddedToContainer()
+        public override void LoadData()
         {
-            base.OnAddedToContainer();
-            this.NeedsUpdate |= VRage.ModAPI.MyEntityUpdateEnum.EACH_FRAME;
-            _suspension = (IMyMotorSuspension)this.Entity;
-
             if (!_isHandlerRegistered)
             {
                 MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
@@ -33,10 +28,32 @@ namespace WheelFix
         {
             if (messageText.Equals("/toggleWheelFix", StringComparison.OrdinalIgnoreCase))
             {
-                _isEnabled = !_isEnabled; // Toggle the enabled state
-                MyAPIGateway.Utilities.ShowNotification($"WheelFix is now {(_isEnabled ? "enabled" : "disabled")}", 2000);
-                sendToOthers = true; // sent to other players and server
+                IsEnabled = !IsEnabled;
+                MyAPIGateway.Utilities.ShowNotification($"WheelFix is now {(IsEnabled ? "enabled" : "disabled")}", 2000);
+                sendToOthers = false;
             }
+        }
+
+        protected override void UnloadData()
+        {
+            if (_isHandlerRegistered)
+            {
+                MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
+                _isHandlerRegistered = false;
+            }
+        }
+    }
+
+    [MyEntityComponentDescriptor(typeof(MyObjectBuilder_MotorSuspension), false)]
+    public class WheelFix : MyGameLogicComponent
+    {
+        private IMyMotorSuspension _suspension;
+        private int _debugCounter = 0;
+        public override void OnAddedToContainer()
+        {
+            base.OnAddedToContainer();
+            this.NeedsUpdate |= VRage.ModAPI.MyEntityUpdateEnum.EACH_FRAME;
+            _suspension = (IMyMotorSuspension)this.Entity;
         }
 
         public const double ResistanceCoefficient = 100d;
@@ -46,7 +63,7 @@ namespace WheelFix
 
         public override void UpdateBeforeSimulation()
         {
-            if (!_isEnabled) return; // Check if the component is enabled
+            if (!WheelFixSession.IsEnabled) return;
 
             base.UpdateBeforeSimulation();
             var grid = _suspension?.TopGrid;
@@ -82,19 +99,5 @@ namespace WheelFix
         {
             base.UpdateAfterSimulation();
         }
-        private static bool _isHandlerRegistered = false;
-
-
-
-        public override void Close()
-        {
-            if (_isHandlerRegistered)
-            {
-                MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
-                _isHandlerRegistered = false;
-            }
-            base.Close();
-        }
-
     }
 }

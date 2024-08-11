@@ -1,5 +1,4 @@
 ﻿using Sandbox.Common.ObjectBuilders;
-using Sandbox.Game.Entities;
 using Sandbox.Game.Entities.Cube;
 using Sandbox.ModAPI;
 using System;
@@ -10,6 +9,9 @@ using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.Utils;
 using VRageMath;
+using Draygo.API;
+using BlendTypeEnum = VRageRender.MyBillboard.BlendTypeEnum;
+using System.Text;
 
 namespace WheelFix
 {
@@ -21,12 +23,28 @@ namespace WheelFix
         private static List<WheelFix> _activeWheels = new List<WheelFix>();
         private static int _updateCounter = 0;
 
+        // HUD API
+        private static HudAPIv2 _hudApi;
+        private static bool _isHudApiReady = false;
+        private static HudAPIv2.HUDMessage _debugHudMessage;
+        private static StringBuilder _debugMessageBuilder = new StringBuilder();
+
+        private const string FontName = "DefaultFont";
+        private static readonly Vector2D HudPosition = new Vector2D(0.0, 0.0); // Adjust as needed
+        private const float HudScale = 0.7f;
+
         public override void LoadData()
         {
             if (!_isHandlerRegistered)
             {
                 MyAPIGateway.Utilities.MessageEntered += OnMessageEntered;
                 _isHandlerRegistered = true;
+            }
+
+            if (!_isHudApiReady && MyAPIGateway.Session?.Player != null)
+            {
+                _hudApi = new HudAPIv2();
+                _isHudApiReady = true;
             }
         }
 
@@ -44,7 +62,7 @@ namespace WheelFix
         {
             base.UpdateAfterSimulation();
 
-            if (!IsEnabled || ++_updateCounter % 60 != 0) return;
+            if (!IsEnabled || !_isHudApiReady || ++_updateCounter % 60 != 0) return;
 
             var player = MyAPIGateway.Session?.Player;
             if (player == null || player.Character == null) return;
@@ -56,12 +74,35 @@ namespace WheelFix
                 .Take(4)
                 .ToList();
 
+            _debugMessageBuilder.Clear();
+            _debugMessageBuilder.AppendLine("WheelFix Debug Info:");
+
             for (int i = 0; i < nearestWheels.Count; i++)
             {
                 var wheel = nearestWheels[i];
                 var distance = Vector3D.Distance(wheel.GetPosition(), playerPosition);
-                MyAPIGateway.Utilities.ShowNotification($"Wheel {i + 1}: {wheel.GetName()} - Distance: {distance:F2}m", 3000, MyFontEnum.White);
-                wheel.DisplayDebugInfo();
+                _debugMessageBuilder.AppendLine($"Wheel {i + 1}: {wheel.GetName()} - Dist: {distance:F2}m");
+                wheel.AppendDebugInfo(_debugMessageBuilder);
+            }
+
+            if (_debugHudMessage == null)
+            {
+                _debugHudMessage = new HudAPIv2.HUDMessage(
+                    Message: _debugMessageBuilder,
+                    origin: HudPosition,
+                    offset: Vector2D.Zero,
+                    timeToLive: -1,
+                    scale: HudScale,
+                    hideHud: false,
+                    shadowing: true,
+                    shadowColor: Color.Black,
+                    blend: BlendTypeEnum.PostPP,
+                    font: FontName
+                );
+            }
+            else
+            {
+                _debugHudMessage.Message = _debugMessageBuilder;
             }
         }
 
@@ -71,6 +112,13 @@ namespace WheelFix
             {
                 MyAPIGateway.Utilities.MessageEntered -= OnMessageEntered;
                 _isHandlerRegistered = false;
+            }
+
+            if (_debugHudMessage != null)
+            {
+                _debugHudMessage.Visible = false;
+                _debugHudMessage.DeleteMessage();
+                _debugHudMessage = null;
             }
         }
 
@@ -92,7 +140,6 @@ namespace WheelFix
     public class WheelFix : MyGameLogicComponent
     {
         private IMyMotorSuspension _suspension;
-        private int _debugCounter = 0;
 
         public override void OnAddedToContainer()
         {
@@ -132,13 +179,13 @@ namespace WheelFix
             grid.Physics.AddForce(MyPhysicsForceType.APPLY_WORLD_IMPULSE_AND_WORLD_ANGULAR_IMPULSE, smoothingForce, null, null);
         }
 
-        public void DisplayDebugInfo()
+        public void AppendDebugInfo(StringBuilder sb)
         {
             var grid = _suspension?.TopGrid;
             if (grid?.Physics == null) return;
 
-            MyAPIGateway.Utilities.ShowNotification($"Base Friction: {grid.Physics.Friction:F2}", 3000, MyFontEnum.White);
-            MyAPIGateway.Utilities.ShowNotification($"Smoothing Force: {TerrainSmoothingFactor:F2}", 3000, MyFontEnum.White);
+            sb.AppendLine($"  Friction: {grid.Physics.Friction:F2}");
+            sb.AppendLine($"  Smoothing: {TerrainSmoothingFactor:F2}");
         }
 
         public Vector3D GetPosition()

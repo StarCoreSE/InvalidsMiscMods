@@ -252,14 +252,15 @@ namespace Scripts.BlockCulling
         {
             var grid = entity as IMyCubeGrid;
             if (grid?.Physics == null) return;
-            if (_culledBlocks.ContainsKey(grid))
+
+            HashSet<IMyCubeBlock> gridBlocks = _culledBlocks.ContainsKey(grid)
+                ? _culledBlocks[grid]
+                : (_culledBlocks[grid] = new HashSet<IMyCubeBlock>());
+
+            if (gridBlocks.Count > 0)
             {
                 ThreadSafeLog.EnqueueMessageDebug($"Grid {grid.EntityId} already exists. Re-initializing...");
-                _culledBlocks[grid].Clear();
-            }
-            else
-            {
-                _culledBlocks.Add(grid, new HashSet<IMyCubeBlock>());
+                gridBlocks.Clear();
             }
             grid.OnBlockAdded += OnBlockPlace;
             grid.OnBlockRemoved += OnBlockRemove;
@@ -351,6 +352,7 @@ namespace Scripts.BlockCulling
             IMyCubeBlock block = slimBlock?.FatBlock;
             if (block == null) return false;
             List<IMySlimBlock> slimNeighborsContributor = new List<IMySlimBlock>();
+            int blockFaceCount = GetBlockFaceCount(block); // Cache the result
             foreach (var slimNeighbor in blockSlimNeighbors)
             {
                 int surroundingBlockCount = 0;
@@ -359,7 +361,7 @@ namespace Scripts.BlockCulling
                 if (surroundingBlockCount != GetBlockFaceCount(slimNeighbor) && !ConnectsWithFullMountPoint(slimBlock, slimNeighbor)) return false;
                 if (slimNeighbor.FatBlock == null || !(slimNeighbor.FatBlock is IMyLightingBlock || slimNeighbor.BlockDefinition.Id.SubtypeName.Contains("Window"))) slimNeighborsContributor.Add(slimNeighbor);
             }
-            bool result = slimNeighborsContributor.Count == GetBlockFaceCount(block);
+            bool result = slimNeighborsContributor.Count == blockFaceCount;
             return result;
         }
 

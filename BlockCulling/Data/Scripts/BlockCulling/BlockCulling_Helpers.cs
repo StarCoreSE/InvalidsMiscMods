@@ -170,7 +170,7 @@ namespace Scripts.BlockCulling
 
     public class TaskScheduler
     {
-        private const int MAX_TASKS_PER_FRAME = 50; //at 10 it takes 5.5 minutes on a 33k reactor grid. we can speed that up
+        private const int MAX_TASKS_PER_FRAME = 10; //at 10 it takes 5.5 minutes on a 33k reactor grid. we can speed that up // I sped it up -Muzz
         private readonly object _lock = new object();
         private readonly Queue<Action> _taskQueue = new Queue<Action>();
 
@@ -216,13 +216,13 @@ namespace Scripts.BlockCulling
 
     public class PerformanceMonitor
     {
-        private const int REPORT_INTERVAL = 1000;
+        private const int REPORT_INTERVAL = 600;
         private int _tickCount;
         private long _syncTimeTotal;
         private long _asyncTimeTotal;
         private int _tasksProcessedTotal;
-        private long _blocksCulledTotal;   // New!
-        private long _blocksUnculledTotal; // New!
+        private long _blocksCulledTotal;   
+        private long _blocksUnculledTotal; 
 
         public void RecordSyncOperation(long milliseconds) => Interlocked.Add(ref _syncTimeTotal, milliseconds);
         public void RecordAsyncOperation(long milliseconds) => Interlocked.Add(ref _asyncTimeTotal, milliseconds);
@@ -242,14 +242,13 @@ namespace Scripts.BlockCulling
 
         private void GenerateReport()
         {
-            // Using StringBuilder instead of string concatenation reduces memory allocations
             StringBuilder report = new StringBuilder();
             report.AppendLine($"Performance Report (Last {REPORT_INTERVAL} ticks):")
                   .AppendLine($"Avg Sync Time: {(double)_syncTimeTotal / REPORT_INTERVAL:F2}ms")
                   .AppendLine($"Avg Async Time: {(double)_asyncTimeTotal / REPORT_INTERVAL:F2}ms")
                   .AppendLine($"Tasks/Second: {(double)_tasksProcessedTotal / (REPORT_INTERVAL / 60.0):F2}")
-                  .AppendLine($"Blocks Culled: {Interlocked.Read(ref _blocksCulledTotal):F2}")
-                  .AppendLine($"Blocks Unculled: {Interlocked.Read(ref _blocksUnculledTotal):F2}");
+                  .AppendLine($"Blocks Culled: {_blocksCulledTotal:F2}")
+                  .AppendLine($"Blocks Unculled: {_blocksUnculledTotal:F2}");
 
             ThreadSafeLog.EnqueueMessage(report.ToString());
         }

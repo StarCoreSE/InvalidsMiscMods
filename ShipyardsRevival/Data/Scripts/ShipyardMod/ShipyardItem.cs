@@ -219,13 +219,20 @@ namespace ShipyardMod.ItemClasses
             if (YardType == ShipyardType.Disabled || YardType == ShipyardType.Invalid)
             {
                 Utilities.Invoke(() =>
-                                 {
-                                     foreach (IMyCubeBlock tool in Tools)
-                                     {
-                                         tool.GameLogic.GetAs<ShipyardCorner>().SetPowerUse(5 + addedPower);
-                                         Communication.SendToolPower(tool.EntityId, 5 + addedPower);
-                                     }
-                                 });
+                {
+                    if (Tools != null)
+                    {
+                        foreach (IMyCubeBlock tool in Tools)
+                        {
+                            var shipyardCorner = tool?.GameLogic?.GetAs<ShipyardCorner>();
+                            if (shipyardCorner != null)
+                            {
+                                shipyardCorner.SetPowerUse(5 + addedPower);
+                                Communication.SendToolPower(tool.EntityId, 5 + addedPower);
+                            }
+                        }
+                    }
+                });
             }
             else
             {
@@ -240,36 +247,44 @@ namespace ShipyardMod.ItemClasses
                 }
 
                 Utilities.Invoke(() =>
-                                 {
-                                     foreach (IMyCubeBlock tool in Tools)
-                                     {
-                                         float power = 5;
-                                         //Logging.Instance.WriteDebug(String.Format("Tool[{0}] Base power usage [{1:F1} MW]", tool.DisplayNameText, power));
-                                         int i = 0;
-                                         foreach (BlockTarget blockTarget in BlocksToProcess[tool.EntityId])
-                                         {
-                                             if (blockTarget == null)
-                                                 continue;
+                {
+                    if (Tools != null)
+                    {
+                        foreach (IMyCubeBlock tool in Tools)
+                        {
+                            float power = 5;
+                            //Logging.Instance.WriteDebug(String.Format("Tool[{0}] Base power usage [{1:F1} MW]", tool.DisplayNameText, power));
 
-                                             float laserPower = 30 + 300 * multiplier * (float)blockTarget.ToolDist[tool.EntityId] / 200000;
-                                             //Logging.Instance.WriteDebug(String.Format("Tool[{0}] laser[{1}] distance[{2:F1}m] multiplier[{3:F1}x] additional power req [{4:F1} MW]", tool.DisplayNameText, i, Math.Sqrt(blockTarget.ToolDist[tool.EntityId]), multiplier, laserPower));
-                                             power += laserPower;
-                                             i++;
-                                         }
+                            if (BlocksToProcess != null && BlocksToProcess.ContainsKey(tool.EntityId))
+                            {
+                                int i = 0;
+                                foreach (BlockTarget blockTarget in BlocksToProcess[tool.EntityId])
+                                {
+                                    if (blockTarget == null)
+                                        continue;
 
-                                         if (!StaticYard)
-                                             power *= 2;
+                                    float laserPower = 30 + 300 * multiplier * (float)blockTarget.ToolDist[tool.EntityId] / 200000;
+                                    //Logging.Instance.WriteDebug(String.Format("Tool[{0}] laser[{1}] distance[{2:F1}m] multiplier[{3:F1}x] additional power req [{4:F1} MW]", tool.DisplayNameText, i, Math.Sqrt(blockTarget.ToolDist[tool.EntityId]), multiplier, laserPower));
+                                    power += laserPower;
+                                    i++;
+                                }
+                            }
 
-                                         power += addedPower;
+                            if (!StaticYard)
+                                power *= 2;
 
-                                         //Logging.Instance.WriteDebug(String.Format("Tool[{0}] Total computed power [{1:F1} MW]", tool.DisplayNameText, power));
-                                         var log = tool.GameLogic.GetAs<ShipyardCorner>();
-                                         if (log == null)
-                                             continue;
-                                         tool.GameLogic.GetAs<ShipyardCorner>().SetPowerUse(power);
-                                         Communication.SendToolPower(tool.EntityId, power);
-                                     }
-                                 });
+                            power += addedPower;
+
+                            //Logging.Instance.WriteDebug(String.Format("Tool[{0}] Total computed power [{1:F1} MW]", tool.DisplayNameText, power));
+                            var shipyardCorner = tool?.GameLogic?.GetAs<ShipyardCorner>();
+                            if (shipyardCorner != null)
+                            {
+                                shipyardCorner.SetPowerUse(power);
+                                Communication.SendToolPower(tool.EntityId, power);
+                            }
+                        }
+                    }
+                });
             }
         }
 

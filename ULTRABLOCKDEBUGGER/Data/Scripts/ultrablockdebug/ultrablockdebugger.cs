@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using Sandbox.Definitions;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
@@ -13,21 +14,24 @@ using VRage.ObjectBuilders;
 using VRage.Utils;
 using VRageMath;
 using System.Linq;
+using VRage.Library.Utils;
+using System.Text;
 
 [MySessionComponentDescriptor(MyUpdateOrder.NoUpdate)]
 public class BlockDebuggerComponent : MySessionComponentBase
 {
-    private const ushort NET_ID = 9972; // Unique network ID
-    private const string COMMAND = "/blockdebug";
+    private const ushort NET_ID = 9972;
+    private const string DEBUG_COMMAND = "/blockdebug";
+    private const string PROFILE_COMMAND = "/blockdebugprofile";
     private const string TempGridDisplayName = "BlockDebugger_TemporaryGrid";
+    private const int PROFILE_ITERATIONS = 10;
+    private const string LOG_FILE_NAME = "blockdebugprofile.log";  // Notice .cfg instead of .xml
+
+
     private List<long> spawnTimes = new List<long>();
     private long minSpawnTime = long.MaxValue;
     private long maxSpawnTime = long.MinValue;
- 
-    private bool ShouldExcludeSubtype(string subtypeName)
-    {
-        return excludedSubtypePrefixes.Any(prefix => subtypeName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-    }
+    private Dictionary<string, long> blockProfileTimes = new Dictionary<string, long>();
 
     private readonly HashSet<string> excludedSubtypePrefixes = new HashSet<string>
     {
@@ -49,10 +53,20 @@ public class BlockDebuggerComponent : MySessionComponentBase
 
     private void OnMessageEntered(string messageText, ref bool sendToOthers)
     {
-        if (!messageText.Equals(COMMAND, StringComparison.InvariantCultureIgnoreCase)) return;
+        if (messageText.Equals(DEBUG_COMMAND, StringComparison.InvariantCultureIgnoreCase))
+        {
+            sendToOthers = false;
+            ExecuteCommand(ExecuteDebugSpawn);
+        }
+        else if (messageText.Equals(PROFILE_COMMAND, StringComparison.InvariantCultureIgnoreCase))
+        {
+            sendToOthers = false;
+            ExecuteCommand(ExecuteProfileSpawn);
+        }
+    }
 
-        sendToOthers = false;  // Don't send this command to chat
-
+    private void ExecuteCommand(Action action)
+    {
         if (!MyAPIGateway.Multiplayer.IsServer)
         {
             MyAPIGateway.Utilities.ShowNotification("BlockDebug: Client detected. Sending request to server!", 5000);
@@ -61,7 +75,7 @@ public class BlockDebuggerComponent : MySessionComponentBase
         else
         {
             MyAPIGateway.Utilities.ShowNotification("BlockDebug: Server detected. Executing locally!", 5000);
-            ExecuteDebugSpawn();
+            action();
         }
     }
 
@@ -81,7 +95,27 @@ public class BlockDebuggerComponent : MySessionComponentBase
     private void ExecuteDebugSpawn()
     {
         MyAPIGateway.Utilities.ShowNotification("BlockDebug: Starting debug spawn process...", 5000);
+        SpawnBlocks(false);
+    }
 
+    private void ExecuteProfileSpawn()
+    {
+        MyAPIGateway.Utilities.ShowNotification("BlockDebug: Starting profiling process...", 5000);
+        blockProfileTimes.Clear();  // Reset profile times before each profile run
+
+        // Do a first-pass to collect data
+        SpawnBlocks(true);
+
+        // Wait 2 seconds, then color & output
+        MyAPIGateway.Utilities.InvokeOnGameThread(() =>
+        {
+            ColorProfiledBlocks();
+            WriteProfileResultsToFile();
+        }, "BlockDebugProfile", 2000);
+    }
+
+    private void SpawnBlocks(bool isProfileRun)
+    {
         try
         {
             MatrixD camMatrix = MyAPIGateway.Session.Camera.WorldMatrix;
@@ -99,64 +133,69 @@ public class BlockDebuggerComponent : MySessionComponentBase
                 return;
             }
 
-            // Calculate the size of the 3D grid
             int gridSize = (int)Math.Ceiling(Math.Pow(totalBlocks, 1.0 / 3.0));
-            double spacing = 75.0; // Adjust the spacing as needed
+            double spacing = 75.0;
 
-            int index = 0;
-            foreach (var blockDef in blockDefinitions)
+            for (int index = 0; index < totalBlocks; index++)
             {
+                var blockDef = blockDefinitions[index];
                 int x = index % gridSize;
                 int y = (index / gridSize) % gridSize;
                 int z = index / (gridSize * gridSize);
 
-                Vector3D offset = new Vector3D(x * spacing, y * spacing, z * spacing);
+                Vector3D offset = new Vector3D(
+                    (x * spacing) + (MyRandom.Instance.NextDouble() * 10),
+                    (y * spacing) + (MyRandom.Instance.NextDouble() * 10),
+                    (z * spacing) + (MyRandom.Instance.NextDouble() * 10)
+                );
                 Vector3D spawnPosition = playerPosition + offset;
 
-                // Create and spawn a new grid for this block
-                var tempGridSpawn = new TempGridSpawn(blockDef, spawnPosition, TempGridDisplayName, OnGridSpawned);
-                index++;
+                if (isProfileRun)
+                {
+                    new TempGridSpawn(blockDef, spawnPosition, TempGridDisplayName + "_Profile", OnProfileGridSpawned);
+                }
+                else
+                {
+                    new TempGridSpawn(blockDef, spawnPosition, TempGridDisplayName, OnGridSpawned);
+                }
             }
 
-            int excludedCount = MyDefinitionManager.Static.GetAllDefinitions()
-                .OfType<MyCubeBlockDefinition>()
-                .Count(def => def.Public && ShouldExcludeSubtype(def.Id.SubtypeName));
+            if (!isProfileRun)
+            {
+                int excludedCount = MyDefinitionManager.Static.GetAllDefinitions()
+                    .OfType<MyCubeBlockDefinition>()
+                    .Count(def => def.Public && ShouldExcludeSubtype(def.Id.SubtypeName));
 
-            MyAPIGateway.Utilities.ShowNotification($"BlockDebug: Attempted to spawn {totalBlocks} blocks. {excludedCount} blocks were excluded based on {excludedSubtypePrefixes.Count} prefixes.", 10000);
+                MyAPIGateway.Utilities.ShowNotification($"BlockDebug: Attempted to spawn {totalBlocks} blocks. {excludedCount} blocks were excluded based on {excludedSubtypePrefixes.Count} prefixes.", 10000);
+            }
         }
         catch (Exception e)
         {
             MyAPIGateway.Utilities.ShowNotification($"BlockDebug: Exception during grid spawn - {e.Message}", 10000, "Red");
         }
     }
+
     private void OnGridSpawned(IMySlimBlock block, long spawnTime)
     {
         if (block != null)
         {
-            // Update min and max spawn times
             spawnTimes.Add(spawnTime);
             minSpawnTime = Math.Min(minSpawnTime, spawnTime);
-
-            // Update the maxSpawnTime to be the average of the top three times
             var topThreeTimes = spawnTimes.OrderByDescending(t => t).Take(3).ToList();
             if (topThreeTimes.Count > 0)
             {
                 maxSpawnTime = (long)topThreeTimes.Average();
             }
 
-            // Calculate the color based on normalized time
             Vector3 colorHSV = GetColorBasedOnNormalizedTime(spawnTime, minSpawnTime, maxSpawnTime);
             IMyCubeGrid grid = block.CubeGrid;
 
-            // Color the blocks in the grid
             var blocks = new List<IMySlimBlock>();
-            grid.GetBlocks(blocks, null); // Get all blocks
+            grid.GetBlocks(blocks, null);
 
             foreach (var slimBlock in blocks)
             {
-                Vector3I minPos = slimBlock.Min;
-                Vector3I maxPos = slimBlock.Min;
-                grid.ColorBlocks(minPos, maxPos, colorHSV);
+                grid.ColorBlocks(slimBlock.Min, slimBlock.Max, colorHSV);
             }
 
             MyAPIGateway.Utilities.ShowNotification($"BlockDebug: Spawned grid with block {block.BlockDefinition.Id} at {block.CubeGrid.GetPosition()} in {spawnTime} ms", 5000);
@@ -165,6 +204,106 @@ public class BlockDebuggerComponent : MySessionComponentBase
         {
             MyAPIGateway.Utilities.ShowNotification("BlockDebug: Failed to spawn block!", 5000, "Red");
         }
+    }
+
+    private void OnProfileGridSpawned(IMySlimBlock block, long spawnTime)
+    {
+        if (block != null)
+        {
+            string key = block.BlockDefinition.Id.ToString();
+            if (!blockProfileTimes.ContainsKey(key))
+            {
+                blockProfileTimes[key] = spawnTime;
+            }
+            else
+            {
+                blockProfileTimes[key] = Math.Min(blockProfileTimes[key], spawnTime);
+            }
+        }
+    }
+
+    private void ColorProfiledBlocks()
+    {
+        if (blockProfileTimes.Count == 0)
+        {
+            MyAPIGateway.Utilities.ShowNotification("BlockDebug: No profile data available to color blocks.", 10000, "Red");
+            return;
+        }
+
+        var minTime = blockProfileTimes.Values.Min();
+        var maxTime = blockProfileTimes.Values.Max();
+
+        foreach (var entity in MyEntities.GetEntities())
+        {
+            var grid = entity as IMyCubeGrid;
+            if (grid != null && grid.DisplayName.StartsWith(TempGridDisplayName + "_Profile"))
+            {
+                var blocks = new List<IMySlimBlock>();
+                grid.GetBlocks(blocks, null);
+                if (blocks.Count > 0)
+                {
+                    var block = blocks[0];
+                    string key = block.BlockDefinition.Id.ToString();
+                    long time;
+                    if (blockProfileTimes.TryGetValue(key, out time))
+                    {
+                        Vector3 colorHSV = GetColorBasedOnNormalizedTime(time, minTime, maxTime);
+                        grid.ColorBlocks(block.Min, block.Max, colorHSV);
+                    }
+                }
+            }
+        }
+
+        MyAPIGateway.Utilities.ShowNotification("BlockDebug: Profiling complete. Blocks colored based on spawn time.", 10000);
+    }
+
+    private void WriteProfileResultsToFile()
+    {
+        try
+        {
+            using (TextWriter writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(LOG_FILE_NAME, typeof(BlockDebuggerComponent)))
+            {
+                if (writer == null)
+                {
+                    MyAPIGateway.Utilities.ShowNotification("BlockDebug: Can't create output! The writer is null!", 10000, "Red");
+                    return;
+                }
+
+                writer.WriteLine($"// Block Debug Profile: {DateTime.Now}");
+                writer.WriteLine($"// Total Blocks Profiled: {blockProfileTimes.Count}");
+                writer.WriteLine($"// Fastest: {blockProfileTimes.Values.Min()}ms   |   Slowest: {blockProfileTimes.Values.Max()}ms");
+                writer.WriteLine($"// Average: {blockProfileTimes.Values.Average():0.00}ms");
+                writer.WriteLine("// ====================================");
+
+                foreach (var report in blockProfileTimes.OrderBy(x => x.Value))
+                {
+                    writer.WriteLine($"{report.Key}: {report.Value:0.00}ms");
+                }
+            }
+
+            MyAPIGateway.Utilities.ShowNotification($"BlockDebug: Profiler log written to local storage", 10000, "White");
+        }
+        catch (Exception e)
+        {
+            MyAPIGateway.Utilities.ShowNotification($"Profile write failed: {e.Message}", 10000, "Red");
+        }
+    }
+
+    private bool ShouldExcludeSubtype(string subtypeName)
+    {
+        return excludedSubtypePrefixes.Any(prefix => subtypeName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private Vector3 GetColorBasedOnNormalizedTime(long spawnTime, long minTime, long maxTime)
+    {
+        if (maxTime == minTime)
+        {
+            return new Vector3(0.33f, 1f, 1f);
+        }
+
+        float normalized = (float)(spawnTime - minTime) / (maxTime - minTime);
+        float hue = MathHelper.Lerp(0.33f, 0f, normalized);
+        return new Vector3(hue, 1f, 1f);
     }
 
     private class TempGridSpawn
@@ -176,7 +315,7 @@ public class BlockDebuggerComponent : MySessionComponentBase
         {
             Callback = callback;
             stopwatch = new Stopwatch();
-            stopwatch.Start(); // Start timing the spawn process
+            stopwatch.Start();
 
             var gridOB = MyObjectBuilderSerializer.CreateNewObject<MyObjectBuilder_CubeGrid>();
             gridOB.EntityId = 0;
@@ -192,8 +331,7 @@ public class BlockDebuggerComponent : MySessionComponentBase
             var blockOB = MyObjectBuilderSerializer.CreateNewObject(blockDef.Id) as MyObjectBuilder_CubeBlock;
             if (blockOB != null)
             {
-                blockOB.Min = Vector3I.Zero;  // Position the block at the grid's origin
-
+                blockOB.Min = Vector3I.Zero;
                 gridOB.PositionAndOrientation = new MyPositionAndOrientation(playerPosition, Vector3.Forward, Vector3.Up);
                 gridOB.CubeBlocks.Add(blockOB);
 
@@ -203,7 +341,7 @@ public class BlockDebuggerComponent : MySessionComponentBase
 
         private void OnGridCreated(IMyEntity ent)
         {
-            stopwatch.Stop(); // Stop timing the spawn process
+            stopwatch.Stop();
             IMyCubeGrid grid = ent as IMyCubeGrid;
             if (grid == null)
             {
@@ -212,29 +350,12 @@ public class BlockDebuggerComponent : MySessionComponentBase
             }
 
             var blocks = new List<IMySlimBlock>();
-            grid.GetBlocks(blocks, null); // Fill the list with blocks
+            grid.GetBlocks(blocks, null);
 
             if (blocks.Count > 0)
             {
-                Callback?.Invoke(blocks[0], stopwatch.ElapsedMilliseconds); // Use the first block to represent the grid
+                Callback?.Invoke(blocks[0], stopwatch.ElapsedMilliseconds);
             }
         }
     }
-
-    private Vector3 GetColorBasedOnNormalizedTime(long spawnTime, long minTime, long maxTime)
-    {
-        if (maxTime == minTime)
-        {
-            // If all times are the same, return green as default
-            return new Vector3(0.33f, 1f, 1f);
-        }
-
-        // Normalize the spawn time between 0 (minTime) and 1 (maxTime)
-        float normalized = (float)(spawnTime - minTime) / (maxTime - minTime);
-
-        // Map the normalized time to a hue (0 = red, 0.33 = green)
-        float hue = MathHelper.Lerp(0f, 0.33f, 1f - normalized); // Invert so shorter times are greener
-        return new Vector3(hue, 1f, 1f);  // Full saturation and value for bright color
-    }
-
 }

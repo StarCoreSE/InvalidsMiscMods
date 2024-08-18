@@ -23,6 +23,17 @@ public class BlockDebuggerComponent : MySessionComponentBase
     private List<long> spawnTimes = new List<long>();
     private long minSpawnTime = long.MaxValue;
     private long maxSpawnTime = long.MinValue;
+ 
+    private bool ShouldExcludeSubtype(string subtypeName)
+    {
+        return excludedSubtypePrefixes.Any(prefix => subtypeName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private readonly HashSet<string> excludedSubtypePrefixes = new HashSet<string>
+    {
+        "EntityCover",
+        "Billboard",
+    };
 
     public override void LoadData()
     {
@@ -76,7 +87,10 @@ public class BlockDebuggerComponent : MySessionComponentBase
             MatrixD camMatrix = MyAPIGateway.Session.Camera.WorldMatrix;
             Vector3D playerPosition = camMatrix.Translation;
 
-            var blockDefinitions = MyDefinitionManager.Static.GetAllDefinitions().OfType<MyCubeBlockDefinition>().Where(def => def.Public).ToList();
+            var blockDefinitions = MyDefinitionManager.Static.GetAllDefinitions()
+                .OfType<MyCubeBlockDefinition>()
+                .Where(def => def.Public && !ShouldExcludeSubtype(def.Id.SubtypeName))
+                .ToList();
             int totalBlocks = blockDefinitions.Count;
 
             if (totalBlocks == 0)
@@ -87,7 +101,7 @@ public class BlockDebuggerComponent : MySessionComponentBase
 
             // Calculate the size of the 3D grid
             int gridSize = (int)Math.Ceiling(Math.Pow(totalBlocks, 1.0 / 3.0));
-            double spacing = 10.0; // Adjust the spacing as needed
+            double spacing = 75.0; // Adjust the spacing as needed
 
             int index = 0;
             foreach (var blockDef in blockDefinitions)
@@ -103,13 +117,18 @@ public class BlockDebuggerComponent : MySessionComponentBase
                 var tempGridSpawn = new TempGridSpawn(blockDef, spawnPosition, TempGridDisplayName, OnGridSpawned);
                 index++;
             }
+
+            int excludedCount = MyDefinitionManager.Static.GetAllDefinitions()
+                .OfType<MyCubeBlockDefinition>()
+                .Count(def => def.Public && ShouldExcludeSubtype(def.Id.SubtypeName));
+
+            MyAPIGateway.Utilities.ShowNotification($"BlockDebug: Attempted to spawn {totalBlocks} blocks. {excludedCount} blocks were excluded based on {excludedSubtypePrefixes.Count} prefixes.", 10000);
         }
         catch (Exception e)
         {
             MyAPIGateway.Utilities.ShowNotification($"BlockDebug: Exception during grid spawn - {e.Message}", 10000, "Red");
         }
     }
-
     private void OnGridSpawned(IMySlimBlock block, long spawnTime)
     {
         if (block != null)

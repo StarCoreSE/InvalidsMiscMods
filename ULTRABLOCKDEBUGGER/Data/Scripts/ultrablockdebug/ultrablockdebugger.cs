@@ -152,12 +152,12 @@ public class BlockDebuggerComponent : MySessionComponentBase
             var blocks = new List<IMySlimBlock>();
             grid.GetBlocks(blocks, null); // Get all blocks
 
-            foreach (var slimBlock in blocks)
-            {
-                Vector3I minPos = slimBlock.Min;
-                Vector3I maxPos = slimBlock.Min;
-                grid.ColorBlocks(minPos, maxPos, colorHSV);
-            }
+           //foreach (var slimBlock in blocks)
+           //{
+           //    Vector3I minPos = slimBlock.Min;
+           //    Vector3I maxPos = slimBlock.Min;
+           //    grid.ColorBlocks(minPos, maxPos, colorHSV);
+           //}
 
             MyAPIGateway.Utilities.ShowNotification($"BlockDebug: Spawned grid with block {block.BlockDefinition.Id} at {block.CubeGrid.GetPosition()} in {spawnTime} ms", 5000);
         }

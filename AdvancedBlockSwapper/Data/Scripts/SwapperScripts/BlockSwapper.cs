@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Windows.Input;
 using ProtoBuf;
 using Sandbox.Definitions;
 using Sandbox.Game.Entities;
@@ -31,6 +29,7 @@ namespace Munashe.BlockSwapper
 
         private List<MyBillboard> PersistBillboard = new List<MyBillboard>();
         private TextWriter logger;
+        private static readonly object logLock = new object();
 
         private Dictionary<string, string> usageDictionary = new Dictionary<string, string>
         {
@@ -39,10 +38,45 @@ namespace Munashe.BlockSwapper
             ["delete"] = "delete {targetSubtype}",
         };
 
+        private TextWriter GetLogger()
+        {
+            if (logger == null)
+            {
+                lock (logLock)
+                {
+                    if (logger == null)
+                    {
+                        try
+                        {
+                            logger = MyAPIGateway.Utilities.WriteFileInLocalStorage("log.txt", typeof(BlockSwapper_Session));
+                            logger.WriteLine($"Log initialized: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                            logger.Flush();
+                        }
+                        catch (Exception e)
+                        {
+                            MyLog.Default.WriteLineAndConsole($"BlockSwapper: Failed to initialize log: {e.Message}");
+                        }
+                    }
+                }
+            }
+            return logger;
+        }
+
         public void Log(string line)
         {
-            logger.WriteLine(line);
-            logger.Flush();
+            lock (logLock)
+            {
+                try
+                {
+                    var logWriter = GetLogger();
+                    logWriter.WriteLine(line);
+                    logWriter.Flush();
+                }
+                catch (Exception e)
+                {
+                    MyLog.Default.WriteLineAndConsole($"BlockSwapper: Failed writing to log: {e.Message}");
+                }
+            }
         }
 
         public override void LoadData()
@@ -58,7 +92,6 @@ namespace Munashe.BlockSwapper
             {
                 MyAPIGateway.Utilities.MessageEnteredSender += HandleMessage;
             }
-            logger = MyAPIGateway.Utilities.WriteFileInLocalStorage("log.txt", typeof(BlockSwapper_Session));
 
             var defs = MyDefinitionManager.Static.GetAllDefinitions();
             foreach (var def in defs.OfType<MyCubeBlockDefinition>())
@@ -79,7 +112,17 @@ namespace Munashe.BlockSwapper
             {
                 MyAPIGateway.Utilities.MessageEnteredSender -= HandleMessage;
             }
-            logger?.Close();
+
+            lock (logLock)
+            {
+                if (logger != null)
+                {
+                    logger.Flush();
+                    logger.Close();
+                    logger = null;
+                }
+            }
+
             Instance = null;
         }
 
@@ -128,11 +171,11 @@ namespace Munashe.BlockSwapper
             sendToOthers = false;
 
             var args = messageText.Substring(commandPrefix.Length)
-                .Split(new []{' '}, StringSplitOptions.RemoveEmptyEntries);
+                .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
             if (args.Length < 1)
             {
-                MyAPIGateway.Utilities.ShowMessage("BlockSwapper",$"No command provided");
+                MyAPIGateway.Utilities.ShowMessage("BlockSwapper", $"No command provided");
                 args = new[] { "help" };
             }
             var command = args[0];
@@ -238,7 +281,6 @@ namespace Munashe.BlockSwapper
         // FatBlocks only
         private int DoBlockReplacementServer(Packet packet)
         {
-            // try MyCubeGrid.BuildBlockRequestInternal(); ?
             if (packet == null) return 0;
             var grid = MyAPIGateway.Entities.GetEntityById(packet.EntityId) as IMyCubeGrid;
             if (grid == null)
@@ -392,7 +434,7 @@ namespace Munashe.BlockSwapper
             }
             catch (Exception ex)
             {
-
+                Log($"Exception in ReceivedPacket: {ex.Message}");
             }
         }
     }

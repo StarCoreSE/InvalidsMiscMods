@@ -66,6 +66,7 @@
         <Z>3</Z>
       </InventorySize>
       <RequiredPowerInput>0.05</RequiredPowerInput>
+	  <PCU>150</PCU>	  
     </Definition>
     <!--	<Definition xsi:type="MyObjectBuilder_PoweredCargoContainerDefinition">
 			<Id>
@@ -221,6 +222,7 @@
       <EdgeType>Light</EdgeType>
       <BuildTimeSeconds>7</BuildTimeSeconds>
       <AutorotateMode>OppositeDirections</AutorotateMode>
+	  <PCU>10</PCU>
     </Definition>
 
 
@@ -269,6 +271,7 @@
       <EdgeType>Light</EdgeType>
       <GuiVisible>false</GuiVisible>
       <BuildTimeSeconds>7</BuildTimeSeconds>
+	  <PCU>10</PCU>
     </Definition>
   </CubeBlocks>
 </Definitions>

@@ -326,28 +326,51 @@ namespace ShipyardMod
         {
             try
             {
-                float power = _power;
-                float maxpower = _maxpower;
-                if (GetYard(b) != null)
-                {
-                    maxpower *= Math.Max(b.GetValueFloat("Shipyard_GrindSpeed"), b.GetValueFloat("Shipyard_WeldSpeed"));
-                    maxpower *= GetBeamCount(b);
-                }
                 var sb = new StringBuilder();
+                ShipyardItem yard = GetYard(b);
+                if (yard == null)
+                {
+                    sb.AppendLine("Not part of a valid shipyard");
+                    arg2.Append(sb);
+                    return;
+                }
+
+                // Power info
                 sb.Append("Required Input: ");
-                MyValueFormatter.AppendWorkInBestUnit(power, sb);
+                MyValueFormatter.AppendWorkInBestUnit(_power, sb);
                 sb.AppendLine();
                 sb.Append("Max required input: ");
-                MyValueFormatter.AppendWorkInBestUnit(maxpower, sb);
-                sb.AppendLine();
-                sb.Append(_info);
+                MyValueFormatter.AppendWorkInBestUnit(_maxpower, sb);
                 sb.AppendLine();
 
+                // Shipyard status
+                sb.AppendLine($"Shipyard Status: {yard.YardType}");
+
+                if (yard.YardType == ShipyardType.Weld && yard.MissingComponentsDict.Any())
+                {
+                    sb.AppendLine("Welding paused - Missing components:");
+                    foreach (var component in yard.MissingComponentsDict)
+                    {
+                        sb.AppendLine($"  {component.Key}: {component.Value}");
+                    }
+                }
+
+                sb.AppendLine($"Blocks remaining: {yard.TargetBlocks.Count}");
+
+                // Additional debug info
+                if (ShipyardCore.Debug)
+                {
+                    sb.AppendLine($"Connected cargo containers: {yard.ConnectedCargo.Count}");
+                    sb.AppendLine($"Contained grids: {yard.ContainsGrids.Count}");
+                    sb.AppendLine($"Intersecting grids: {yard.IntersectsGrids.Count}");
+                }
+
+                sb.Append(_info);
                 arg2.Append(sb);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                //don't really care, just don't crash
+                arg2.AppendLine($"Error in custom info: {ex.Message}");
             }
         }
 

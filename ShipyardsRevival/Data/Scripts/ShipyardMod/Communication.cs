@@ -17,12 +17,12 @@ namespace ShipyardMod.Utility
 {
     public class Communication
     {
-        private const ushort MESSAGE_ID = 18597;
+        private const ushort MESSAGE_ID = 53286;
         public static Dictionary<long, List<LineItem>> LineDict = new Dictionary<long, List<LineItem>>();
         public static HashSet<LineItem> FadeList = new HashSet<LineItem>();
         public static List<ScanAnimation> ScanList = new List<ScanAnimation>();
         public static string FullName = typeof(Communication).FullName;
-        
+
         private static void Recieve(byte[] data)
         {
             try
@@ -470,26 +470,37 @@ namespace ShipyardMod.Utility
 
             var yardItem = new ShipyardItem(yardBox, tools.ToArray(), yardStruct.YardType, yardGrid);
 
-            if (MyAPIGateway.Entities.TryGetEntityById(yardStruct.ButtonId, out outEntity))
-            {
-                Logging.Instance.WriteLine("Bind Buttons");
-                var buttons = (IMyButtonPanel)outEntity;
-                buttons.ButtonPressed += yardItem.HandleButtonPressed;
-                var blockDef = (MyButtonPanelDefinition)MyDefinitionManager.Static.GetCubeBlockDefinition(buttons.BlockDefinition);
-                for (int i = 1; i <= 4; i ++)
-                {
-                    var c = blockDef.ButtonColors[i % blockDef.ButtonColors.Length];
-                    buttons.SetEmissiveParts($"Emissive{i}", new Color(c.X, c.Y, c.Z), c.W);
-                }
-                buttons.SetCustomButtonName(0, "Exit");
-                buttons.SetCustomButtonName(1, "Up");
-                buttons.SetCustomButtonName(2, "Down");
-                buttons.SetCustomButtonName(3, "Select");
-                //buttons.SetEmissiveParts("Emissive1", blockDef.ButtonColors[1 % blockDef.ButtonColors.Length], 1);
-                //buttons.SetEmissiveParts("Emissive2", blockDef.ButtonColors[2 % blockDef.ButtonColors.Length], 1);
-                //buttons.SetEmissiveParts("Emissive3", blockDef.ButtonColors[3 % blockDef.ButtonColors.Length], 1);
-                //buttons.SetEmissiveParts("Emissive4", blockDef.ButtonColors[4 % blockDef.ButtonColors.Length], 1);
-            }
+            //TODO: this was part of the touch screen API, it bricks shipyards under certain circumstances with other (poorly made?) mods that affect something about button panels
+            //if (MyAPIGateway.Entities.TryGetEntityById(yardStruct.ButtonId, out outEntity))
+            //{
+            //    try
+            //    {
+            //        Logging.Instance.WriteLine("Bind Buttons");
+            //        var buttons = (IMyButtonPanel)outEntity;
+            //        buttons.ButtonPressed += yardItem.HandleButtonPressed;
+            //
+            //        // Only set emissive parts if a config option allows it
+            //        if (ShipyardSettings.Instance.UseExperimentalButtonGraphics)
+            //        {
+            //            var blockDef = (MyButtonPanelDefinition)MyDefinitionManager.Static.GetCubeBlockDefinition(buttons.BlockDefinition);
+            //            for (int i = 1; i <= 4; i++)
+            //            {
+            //                var c = blockDef.ButtonColors[i % blockDef.ButtonColors.Length];
+            //                buttons.SetEmissiveParts($"Emissive{i}", new Color(c.X, c.Y, c.Z), c.W);
+            //            }
+            //        }
+            //
+            //        buttons.SetCustomButtonName(0, "Exit");
+            //        buttons.SetCustomButtonName(1, "Up");
+            //        buttons.SetCustomButtonName(2, "Down");
+            //        buttons.SetCustomButtonName(3, "Select");
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        Logging.Instance.WriteLine($"Error binding buttons: {ex}");
+            //        // Optionally, fall back to a non-experimental method
+            //    }
+            //}
 
             foreach (IMyCubeBlock tool in yardItem.Tools)
             {

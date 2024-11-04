@@ -103,6 +103,8 @@ namespace ShipyardMod.ProcessHandlers
                     {
                         item.ContainsGrids.Add(grid);
                         item.IntersectsGrids.Remove(grid);
+                        Logging.Instance.WriteDebug($"Added grid to ContainsGrids: {grid.DisplayName}");
+                        Logging.Instance.WriteDebug($"ContainsGrids count: {item.ContainsGrids.Count}");
                     }
                     else if (result == ContainmentType.Intersects)
                     {

@@ -346,22 +346,23 @@ namespace ShipyardMod
                 // Shipyard status
                 sb.AppendLine($"Shipyard Status: {yard.YardType}");
 
-                // Display the stats from our dictionary
-                string stats;
-                if (ProcessShipyardAction.ShipyardStats.TryGetValue(yard.EntityId, out stats))
-                {
-                    sb.AppendLine("\nStatus:");
-                    sb.AppendLine(stats);
-                }
-
-                // Show missing components for welding
                 if (yard.YardType == ShipyardType.Weld && yard.MissingComponentsDict.Any())
                 {
-                    sb.AppendLine("\nMissing Components:");
-                    foreach (var comp in yard.MissingComponentsDict)
+                    sb.AppendLine("Welding paused - Missing components:");
+                    foreach (var component in yard.MissingComponentsDict)
                     {
-                        sb.AppendLine($"  {comp.Key}: {comp.Value}");
+                        sb.AppendLine($"  {component.Key}: {component.Value}");
                     }
+                }
+
+                sb.AppendLine($"Blocks remaining: {yard.TargetBlocks.Count}");
+
+                // Additional debug info
+                if (ShipyardCore.Debug)
+                {
+                    sb.AppendLine($"Connected cargo containers: {yard.ConnectedCargo.Count}");
+                    sb.AppendLine($"Contained grids: {yard.ContainsGrids.Count}");
+                    sb.AppendLine($"Intersecting grids: {yard.IntersectsGrids.Count}");
                 }
 
                 sb.Append(_info);

@@ -14,9 +14,6 @@ using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRageMath;
-using ShipyardMod.ItemClasses;
-using System.Text;
-
 
 namespace ShipyardMod.ProcessHandlers
 {
@@ -27,8 +24,6 @@ namespace ShipyardMod.ProcessHandlers
         private readonly HashSet<BlockTarget> _stalledTargets = new HashSet<BlockTarget>();
 
         private readonly MyInventory _tmpInventory = new MyInventory();
-
-        public static readonly Dictionary<long, string> ShipyardStats = new Dictionary<long, string>();
 
         public override int GetUpdateResolution()
         {
@@ -191,8 +186,6 @@ namespace ShipyardMod.ProcessHandlers
 
         private void StepGrind(ShipyardItem shipyardItem)
         {
-            UpdateShipyardStats(shipyardItem);
-
             var targetsToRedraw = new HashSet<BlockTarget>();
             //we need to multiply this by MyShipGrinderConstants.GRINDER_AMOUNT_PER_SECOND / 2... which evaluates to 1
             float grindAmount = MyAPIGateway.Session.GrinderSpeedMultiplier * shipyardItem.Settings.GrindMultiplier;
@@ -466,144 +459,12 @@ namespace ShipyardMod.ProcessHandlers
             grindActionBlock.End();
         }
 
-        public static void UpdateShipyardStats(ShipyardItem shipyardItem)
-        {
-            var statsBuilder = new StringBuilder();
-
-            // Basic status info - always show this
-            statsBuilder.AppendLine($"Mode: {shipyardItem.YardType}");
-            
-
-            // Only show detailed info if not disabled
-            if (shipyardItem.YardType != ShipyardType.Disabled)
-            {
-                // Separate physical and projected grids
-                var physicalGrids = shipyardItem.YardGrids.Where(g => g.Physics != null).ToList();
-                var projectedGrids = shipyardItem.YardGrids.Where(g => g.Physics == null && g.Projector() != null).ToList();
-
-                statsBuilder.AppendLine($"Physical Grids: {physicalGrids.Count}");
-                if (projectedGrids.Any())
-                {
-                    statsBuilder.AppendLine($"Projected Grids: {projectedGrids.Count}");
-                }
-
-                int physicalBlocks = shipyardItem.TargetBlocks.Count(t => t.Block.CubeGrid.Physics != null);
-                int projectedBlocks = shipyardItem.TargetBlocks.Count(t => t.Block.CubeGrid.Physics == null);
-
-                statsBuilder.AppendLine($"Physical Blocks to Process: {physicalBlocks}");
-                if (projectedBlocks > 0)
-                {
-                    statsBuilder.AppendLine($"Projected Blocks to Process: {projectedBlocks}");
-                }
-
-                // Show physical grids being processed
-                if (physicalGrids.Any())
-                {
-                    statsBuilder.AppendLine("\nProcessing Physical Grids:");
-                    foreach (var grid in physicalGrids)
-                    {
-                        if (grid != null && !grid.Closed && grid.Physics != null)
-                        {
-                            int physicalBlockCount = shipyardItem.TargetBlocks.Count(target =>
-                                target.Block.CubeGrid == grid &&
-                                target.Block.CubeGrid.Physics != null
-                            );
-
-                            if (physicalBlockCount > 0)
-                            {
-                                statsBuilder.AppendLine($"- {grid.DisplayName}: {physicalBlockCount} blocks");
-                            }
-                        }
-                    }
-                }
-
-                if (shipyardItem.YardType == ShipyardType.Grind)
-                {
-                    // Calculate total components that can be recovered
-                    var totalComponents = new Dictionary<string, int>();
-                    foreach (var target in shipyardItem.TargetBlocks)
-                    {
-                        if (target?.Block != null)
-                        {
-                            var blockDef = (MyDefinitionId)target.Block.BlockDefinition.Id;
-                            MyCubeBlockDefinition def;
-                            if (MyDefinitionManager.Static.TryGetCubeBlockDefinition(blockDef, out def))
-                            {
-                                float progress = (target.Block.BuildIntegrity / target.Block.MaxIntegrity);
-                                foreach (var comp in def.Components)
-                                {
-                                    int amount = (int)(comp.Count * progress);
-                                    if (amount > 0)
-                                    {
-                                        if (totalComponents.ContainsKey(comp.Definition.Id.SubtypeName))
-                                            totalComponents[comp.Definition.Id.SubtypeName] += amount;
-                                        else
-                                            totalComponents[comp.Definition.Id.SubtypeName] = amount;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (totalComponents.Any())
-                    {
-                        statsBuilder.AppendLine("\nEstimated Components to Recover:");
-                        foreach (var comp in totalComponents)
-                        {
-                            statsBuilder.AppendLine($"  {comp.Key}: {comp.Value}");
-                        }
-                    }
-                }
-
-                // Show active targets for both welding and grinding
-                if (shipyardItem.BlocksToProcess.Any())
-                {
-                    statsBuilder.AppendLine("\nActive Targets:");
-                    foreach (var toolEntry in shipyardItem.BlocksToProcess)
-                    {
-                        foreach (var target in toolEntry.Value)
-                        {
-                            if (target?.Block != null)
-                            {
-                                float progress = (target.Block.BuildIntegrity / target.Block.MaxIntegrity) * 100;
-                                string gridType = target.Block.CubeGrid.Physics != null ? "" : "[Projected] ";
-
-                                if (shipyardItem.YardType == ShipyardType.Weld)
-                                {
-                                    statsBuilder.AppendLine($"- {gridType}{target.Block.BlockDefinition.DisplayNameText}: {progress:F1}%");
-                                }
-                                else if (shipyardItem.YardType == ShipyardType.Grind)
-                                {
-                                    statsBuilder.AppendLine($"- {gridType}{target.Block.BlockDefinition.DisplayNameText}");
-                                    statsBuilder.AppendLine($"    Remaining Integrity: {progress:F1}%");
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Add missing components information for welding
-                if (shipyardItem.YardType == ShipyardType.Weld && shipyardItem.MissingComponentsDict.Any())
-                {
-                    statsBuilder.AppendLine("\nMissing Components:");
-                    foreach (var comp in shipyardItem.MissingComponentsDict)
-                    {
-                        statsBuilder.AppendLine($"  {comp.Key}: {comp.Value}");
-                    }
-                }
-            }
-
-            // Store in dictionary
-            ShipyardStats[shipyardItem.EntityId] = statsBuilder.ToString();
-        }
-
         private bool StepWeld(ShipyardItem shipyardItem)
         {
-            UpdateShipyardStats(shipyardItem);
-
             var targetsToRemove = new HashSet<BlockTarget>();
             var targetsToRedraw = new HashSet<BlockTarget>();
 
+            //we need to multiply this by MyShipWelder.WELDER_AMOUNT_PER_SECOND / 2, which also evaluates to 1
             float weldAmount = MyAPIGateway.Session.WelderSpeedMultiplier * shipyardItem.Settings.WeldMultiplier;
             float boneAmount = weldAmount * .1f;
 
@@ -612,7 +473,7 @@ namespace ShipyardMod.ProcessHandlers
                 var sortBlock = Profiler.Start(FullName, nameof(StepWeld), "Sort Targets");
                 shipyardItem.TargetBlocks.Clear();
                 shipyardItem.ProxDict.Clear();
-
+                //precalculate all the BlockTarget for our target grids to speed things up
                 var gridTargets = new Dictionary<long, List<BlockTarget>>();
                 foreach (IMyCubeGrid targetGrid in shipyardItem.YardGrids)
                 {
@@ -629,34 +490,63 @@ namespace ShipyardMod.ProcessHandlers
                             continue;
 
                         var target = new BlockTarget(block, shipyardItem);
+
                         shipyardItem.TargetBlocks.Add(target);
+
                         gridTargets[targetGrid.EntityId].Add(target);
                     }
-                }
+                    /*
+                    var proj = targetGrid.Projector();
+                    if (proj != null && !shipyardItem.YardGrids.Contains(proj.CubeGrid))
+                    {
+                        proj.CubeGrid.GetBlocks(tmpBlocks);
+                        gridTargets.Add(proj.CubeGrid.EntityId,new List<BlockTarget>());
+                        foreach (var block in tmpBlocks.ToArray())
+                        {
+                            if (block == null || (targetGrid.Physics != null && block.IsFullIntegrity && !block.HasDeformation))
+                                continue;
 
+                            var pos = block.GetPosition();
+                            if (!shipyardItem.ShipyardBox.Contains(ref pos))
+                                continue;
+
+                            var target = new BlockTarget(block, shipyardItem);
+
+                            shipyardItem.TargetBlocks.Add(target);
+                            gridTargets[block.CubeGrid.EntityId].Add(target);
+                        }
+                    }
+                    */
+                }
+                int count = 0;
+                foreach (KeyValuePair<long, List<BlockTarget>> entry in gridTargets)
+                    count += entry.Value.Count;
+                
                 foreach (IMyCubeBlock tool in shipyardItem.Tools)
                 {
                     shipyardItem.ProxDict.Add(tool.EntityId, new List<BlockTarget>());
+                    //first sort grids by distance to tool
                     shipyardItem.YardGrids.Sort((a, b) =>
-                        Vector3D.DistanceSquared(a.Center(), tool.GetPosition()).CompareTo(
-                            Vector3D.DistanceSquared(b.Center(), tool.GetPosition())));
+                                                    Vector3D.DistanceSquared(a.Center(), tool.GetPosition()).CompareTo(
+                                                        Vector3D.DistanceSquared(b.Center(), tool.GetPosition())));
 
                     foreach (IMyCubeGrid grid in shipyardItem.YardGrids)
                     {
+                        //then sort blocks by distance to grid center
                         List<BlockTarget> list = gridTargets[grid.EntityId];
                         list.Sort((a, b) => a.CenterDist.CompareTo(b.CenterDist));
+
                         shipyardItem.ProxDict[tool.EntityId].AddRange(list);
                     }
                 }
                 sortBlock.End();
             }
 
+            //nothing to do
             if (shipyardItem.TargetBlocks.Count == 0)
                 return false;
-
-            if (shipyardItem.TargetBlocks.Count == 0)
-                return false;
-
+            
+            //assign blocks to our welders
             foreach (IMyCubeBlock welder in shipyardItem.Tools)
             {
                 for (int i = 0; i < shipyardItem.Settings.BeamCount; i++)
@@ -670,6 +560,7 @@ namespace ShipyardMod.ProcessHandlers
                     foreach (BlockTarget target in shipyardItem.ProxDict[welder.EntityId])
                     {
                         bool found = false;
+                        //one block per tool
                         foreach (KeyValuePair<long, BlockTarget[]> entry in shipyardItem.BlocksToProcess)
                         {
                             if (entry.Value.Contains(target))
@@ -701,6 +592,7 @@ namespace ShipyardMod.ProcessHandlers
                                 Utilities.InvokeBlocking(() => success = BuildTarget(target, shipyardItem, welder));
                                 if (!success)
                                 {
+                                    //toRemove.Add(target);
                                     continue;
                                 }
                                 target.UpdateAfterBuild();
@@ -720,7 +612,7 @@ namespace ShipyardMod.ProcessHandlers
                         targetsToRedraw.Add(nextTarget);
                         shipyardItem.BlocksToProcess[welder.EntityId][i] = nextTarget;
                     }
-
+                    
                     foreach (BlockTarget removeTarget in toRemove)
                     {
                         shipyardItem.ProxDict[welder.EntityId].Remove(removeTarget);
@@ -728,58 +620,30 @@ namespace ShipyardMod.ProcessHandlers
                     }
                 }
             }
-
+            
+            //update lasers
             foreach (KeyValuePair<long, BlockTarget[]> entry in shipyardItem.BlocksToProcess)
             {
                 for (int i = 0; i < entry.Value.Length; i++)
                 {
-                    BlockTarget target = entry.Value[i];
+                    BlockTarget targetBlock = entry.Value[i];
 
-                    if (target == null)
+                    if (targetBlock == null || _stalledTargets.Contains(targetBlock))
                         continue;
 
-                    if (targetsToRemove.Contains(target))
+                    if (targetsToRedraw.Contains(targetBlock))
                     {
-                        Communication.ClearLine(entry.Key, i);
-                        _stalledTargets.Remove(target);
-                        shipyardItem.TargetBlocks.Remove(target);
-                        entry.Value[i] = null;
-                        continue;
-                    }
-
-                    if (_stalledTargets.Contains(target))
-                    {
-                        var blockComponents = new Dictionary<string, int>();
-                        target.Block.GetMissingComponents(blockComponents);
-
-                        foreach (KeyValuePair<string, int> component in blockComponents)
-                        {
-                            if (shipyardItem.MissingComponentsDict.ContainsKey(component.Key))
-                                shipyardItem.MissingComponentsDict[component.Key] += component.Value;
-                            else
-                            {
-                                shipyardItem.MissingComponentsDict.Add(component.Key, component.Value);
-                                // Send notification for newly missing component
-                                MyAPIGateway.Utilities.ShowNotification($"Shipyard stalled: Need {component.Value}x {component.Key}", 2000, "Red");
-                            }
-                        }
-
                         var toolLine = new Communication.ToolLineStruct
-                        {
-                            ToolId = entry.Key,
-                            GridId = target.CubeGrid.EntityId,
-                            BlockPos = target.GridPosition,
-                            PackedColor = Color.Purple.PackedValue,
-                            Pulse = true,
-                            EmitterIndex = (byte)i
-                        };
-
-                        if (targetsToRedraw.Contains(target))
-                        {
-                            Communication.ClearLine(entry.Key, i);
-                            Communication.SendLine(toolLine, shipyardItem.ShipyardBox.Center);
-                        }
-                        continue;
+                                       {
+                                           ToolId = entry.Key,
+                                           GridId = targetBlock.CubeGrid.EntityId,
+                                           BlockPos = targetBlock.GridPosition,
+                                           PackedColor = Color.DarkCyan.PackedValue,
+                                           Pulse = false,
+                                           EmitterIndex = (byte)i
+                                       };
+                        
+                        Communication.SendLine(toolLine, shipyardItem.ShipyardBox.Center);
                     }
                 }
             }
@@ -791,74 +655,122 @@ namespace ShipyardMod.ProcessHandlers
             targetsToRedraw.Clear();
 
             Utilities.InvokeBlocking(() =>
-            {
-                foreach (IMyCubeBlock welder in shipyardItem.Tools)
-                {
-                    var tool = (IMyCollector)welder;
-                    MyInventory welderInventory = ((MyEntity)tool).GetInventory();
-                    int i = 0;
-                    foreach (BlockTarget target in shipyardItem.BlocksToProcess[tool.EntityId])
-                    {
-                        if (target == null)
-                            continue;
+                                     {
+                                         foreach (IMyCubeBlock welder in shipyardItem.Tools)
+                                         {
+                                             var tool = (IMyCollector)welder;
+                                             MyInventory welderInventory = ((MyEntity)tool).GetInventory();
+                                             int i = 0;
+                                             foreach (BlockTarget target in shipyardItem.BlocksToProcess[tool.EntityId])
+                                             {
+                                                 if (target == null)
+                                                     continue;
+                                                 
+                                                 if (target.CubeGrid.Physics == null || target.CubeGrid.Closed || target.CubeGrid.MarkedForClose)
+                                                 {
+                                                     targetsToRemove.Add(target);
+                                                     continue;
+                                                 }
 
-                        if (target.CubeGrid.Physics == null || target.CubeGrid.Closed || target.CubeGrid.MarkedForClose)
-                        {
-                            targetsToRemove.Add(target);
-                            continue;
-                        }
+                                                 //      if (MyAPIGateway.Session.CreativeMode)
+                                                 //     {
+                                                 /*
+                                                  * Welding laser "efficiency" is a float between 0-1 where:
+                                                  *   0.0 =>   0% of component stock used for construction (100% loss)
+                                                  *   1.0 => 100% of component stock used for construction (0% loss)
+                                                  * 
+                                                  * Efficiency decay/distance formula is the same as above for grinder
+                                                  */
 
-                        double efficiency = 1;
-                        if (efficiency < 0.1)
-                            efficiency = 0.1;
+                                                 // Set efficiency to 1 because wtf ew no, good ideas aren't allowed
+                                                 //double efficiency = 1 - (target.ToolDist[tool.EntityId] / 200000);
+                                                 double efficiency = 1;
+                                                 //if (!shipyardItem.StaticYard)
+                                                 //        efficiency /= 2;
+                                                 if (efficiency < 0.1)
+                                                     efficiency = 0.1;
+                                                     //Logging.Instance.WriteDebug(String.Format("Welder[{0}]block[{1}] distance=[{2:F2}m] efficiency=[{3:F5}]", tool.DisplayNameText, i, Math.Sqrt(target.ToolDist[tool.EntityId]), efficiency));
+                                                     /*
+                                                      * We have to factor in our efficiency ratio before transferring to the block "construction stockpile",
+                                                      * but that math isn't nearly as easy as it was with the grinder.
+                                                      * 
+                                                      * For each missing component type, we know how many items are "missing" from the construction model, M
+                                                      * 
+                                                      * The simplest approach would be to pull M items from the conveyor system (if enabled), then move
+                                                      * (M*efficiency) items to the "construction stockpile" and vaporize the other (M*(1-efficiency)) items.
+                                                      * However, this approach would leave the construction stockpile incomplete and require several iterations
+                                                      * before M items have actually been copied.
+                                                      * 
+                                                      * A better solution is to pull enough "extra" items from the conveyors that the welder has enough to
+                                                      * move M items to the construction stockpile even after losses due to distance inefficiency
+                                                      *
+                                                      * For example, if the target block is missing M=9 items and we are running at 0.9 (90%) efficiency,
+                                                      * ideally that means we should pull 10 units, vaporize 1, and still have 9 for construction. However,
+                                                      * if the conveyor system was only able to supply us with 2 components, we should not continue to blindly
+                                                      * vaporize 1 unit.
+                                                      * 
+                                                      * Instead, we have to consult the post-conveyor-pull welder inventory to determine if it has at least
+                                                      * the required number of components.  If it does, we vaporize M*(1-efficiency).  Otherwise we only
+                                                      * vaporize current_count*(1-efficiency) and transfer the rest to the construction stockpile
+                                                      */
+                                                     var missingComponents = new Dictionary<string, int>();
+                                                     target.Block.GetMissingComponents(missingComponents);
 
-                        var missingComponents = new Dictionary<string, int>();
-                        target.Block.GetMissingComponents(missingComponents);
+                                                     var wasteComponents = new Dictionary<string, int>();
+                                                     foreach (KeyValuePair<string, int> entry in missingComponents)
+                                                     {
+                                                         var componentId = new MyDefinitionId(typeof(MyObjectBuilder_Component), entry.Key);
+                                                         int missing = entry.Value;
+                                                         MyFixedPoint totalRequired = (MyFixedPoint)(missing / efficiency);
 
-                        var wasteComponents = new Dictionary<string, int>();
-                        foreach (KeyValuePair<string, int> entry in missingComponents)
-                        {
-                            var componentId = new MyDefinitionId(typeof(MyObjectBuilder_Component), entry.Key);
-                            int missing = entry.Value;
-                            MyFixedPoint totalRequired = (MyFixedPoint)(missing / efficiency);
-                            MyFixedPoint currentStock = welderInventory.GetItemAmount(componentId);
+                                                         MyFixedPoint currentStock = welderInventory.GetItemAmount(componentId);
 
-                            if (currentStock < totalRequired && tool.UseConveyorSystem)
-                            {
-                                welderInventory.PullAny(shipyardItem.ConnectedCargo, entry.Key, (int)Math.Ceiling((double)(totalRequired - currentStock)));
-                                currentStock = welderInventory.GetItemAmount(componentId);
-                            }
+                                                         //Logging.Instance.WriteDebug(String.Format("Welder[{0}]block[{1}] Component[{2}] missing[{3:F3}] inefficiency requires[{4:F3}] in_stock[{5:F3}]", tool.DisplayNameText, i, entry.Key, missing, totalRequired, currentStock));
+                                                         if (currentStock < totalRequired && tool.UseConveyorSystem)
+                                                         {
+                                                             // Welder doesn't have totalRequired, so try to pull the difference from conveyors
+                                                             welderInventory.PullAny(shipyardItem.ConnectedCargo, entry.Key, (int)Math.Ceiling((double)(totalRequired - currentStock)));
+                                                             currentStock = welderInventory.GetItemAmount(componentId);
+                                                             //Logging.Instance.WriteDebug(String.Format("Welder[{0}]block[{1}] Component[{2}] - after conveyor pull - in_stock[{3:F3}]", tool.DisplayNameText, i, entry.Key, currentStock));
+                                                         }
 
-                            if (currentStock >= 1)
-                            {
-                                MyFixedPoint toDelete = MyFixedPoint.Min(MyFixedPoint.Floor(currentStock), missing) * (MyFixedPoint)(1 - efficiency);
-                                welderInventory.RemoveItemsOfType(toDelete, componentId);
-                            }
-                        }
+                                                         // Now compute the number of components to delete
+                                                         // MoveItemsToConstructionPile() below won't move anything if we have less than 1 unit,
+                                                         // so don't bother "losing" anything due to ineffeciency
+                                                         if (currentStock >= 1)
+                                                         {
+                                                             // The lesser of (missing, currentStock), times (1 minus) our efficiency fraction
+                                                             MyFixedPoint toDelete = MyFixedPoint.Min(MyFixedPoint.Floor(currentStock), missing) * (MyFixedPoint)(1 - efficiency);
+                                                             //Logging.Instance.WriteDebug(String.Format("Welder[{0}]block[{1}] Component[{2}] amount lost due to distance [{3:F3}]", tool.DisplayNameText, i, entry.Key, toDelete));
+                                                             welderInventory.RemoveItemsOfType(toDelete, componentId);
+                                                         }
+                                                     }
 
-                        target.Block.MoveItemsToConstructionStockpile(welderInventory);
-                        missingComponents.Clear();
-                        target.Block.GetMissingComponents(missingComponents);
+                                                     target.Block.MoveItemsToConstructionStockpile(welderInventory);
 
-                        if (missingComponents.Any() && !target.Block.HasDeformation)
-                        {
-                            if (_stalledTargets.Add(target))
-                                targetsToRedraw.Add(target);
-                        }
-                        else
-                        {
-                            if (_stalledTargets.Remove(target))
-                                targetsToRedraw.Add(target);
-                        }
+                                                     missingComponents.Clear();
+                                                     target.Block.GetMissingComponents(missingComponents);
+                                                     
+                                                     if (missingComponents.Any() && !target.Block.HasDeformation)
+                                                     {
+                                                         if (_stalledTargets.Add(target))
+                                                             targetsToRedraw.Add(target);
+                                                     }
+                                                     else
+                                                     {
+                                                         if (_stalledTargets.Remove(target))
+                                                             targetsToRedraw.Add(target);
+                                                     }
 
-                        target.Block.IncreaseMountLevel(weldAmount, 0, welderInventory, boneAmount, true);
-                        if (target.Block.IsFullIntegrity && !target.Block.HasDeformation)
-                            targetsToRemove.Add(target);
-                        i++;
-                    }
-                }
-            });
-
+                                                     target.Block.IncreaseMountLevel(weldAmount, 0, welderInventory, boneAmount, true);
+                                                     if (target.Block.IsFullIntegrity && !target.Block.HasDeformation)
+                                                         targetsToRemove.Add(target);
+                                            //     }
+                                                 i++;
+                                             }
+                                         }
+                                     });
+            
             shipyardItem.MissingComponentsDict.Clear();
 
             foreach (KeyValuePair<long, BlockTarget[]> entry in shipyardItem.BlocksToProcess)
@@ -878,7 +790,7 @@ namespace ShipyardMod.ProcessHandlers
                         entry.Value[i] = null;
                         continue;
                     }
-
+                    
                     if (_stalledTargets.Contains(target))
                     {
                         var blockComponents = new Dictionary<string, int>();
@@ -891,16 +803,16 @@ namespace ShipyardMod.ProcessHandlers
                             else
                                 shipyardItem.MissingComponentsDict.Add(component.Key, component.Value);
                         }
-
+                        
                         var toolLine = new Communication.ToolLineStruct
-                        {
-                            ToolId = entry.Key,
-                            GridId = target.CubeGrid.EntityId,
-                            BlockPos = target.GridPosition,
-                            PackedColor = Color.Purple.PackedValue,
-                            Pulse = true,
-                            EmitterIndex = (byte)i
-                        };
+                                       {
+                                           ToolId = entry.Key,
+                                           GridId = target.CubeGrid.EntityId,
+                                           BlockPos = target.GridPosition,
+                                           PackedColor = Color.Purple.PackedValue,
+                                           Pulse = true,
+                                           EmitterIndex = (byte)i
+                                       };
 
                         if (targetsToRedraw.Contains(target))
                         {
@@ -908,31 +820,6 @@ namespace ShipyardMod.ProcessHandlers
                             Communication.SendLine(toolLine, shipyardItem.ShipyardBox.Center);
                         }
                         continue;
-                    }
-                }
-            }
-
-            // Update CurrentProcessingTargets
-            shipyardItem.CurrentProcessingTargets.Clear();
-            foreach (KeyValuePair<long, BlockTarget[]> entry in shipyardItem.BlocksToProcess)
-            {
-                foreach (BlockTarget target in entry.Value)
-                {
-                    if (target != null)
-                    {
-                        var targetInfo = new ProcessingTargetInfo
-                        {
-                            Target = target,
-                            IsStalled = _stalledTargets.Contains(target),
-                            MissingComponents = new Dictionary<string, int>()
-                        };
-
-                        if (targetInfo.IsStalled)
-                        {
-                            target.Block.GetMissingComponents(targetInfo.MissingComponents);
-                        }
-
-                        shipyardItem.CurrentProcessingTargets.Add(targetInfo);
                     }
                 }
             }
@@ -971,5 +858,4 @@ namespace ShipyardMod.ProcessHandlers
             return false;
         }
     }
-
 }

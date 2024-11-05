@@ -11,7 +11,6 @@ using VRageMath;
 using System;
 using VRage.Collections;
 using VRage.Game.Components;
-using ShipyardMod.ProcessHandlers;
 
 namespace ShipyardMod.ItemClasses
 {
@@ -22,13 +21,6 @@ namespace ShipyardMod.ItemClasses
         Grind,
         Invalid,
         Scanning
-    }
-
-    public class ProcessingTargetInfo
-    {
-        public BlockTarget Target { get; set; }
-        public bool IsStalled { get; set; }
-        public Dictionary<string, int> MissingComponents { get; set; }
     }
 
     public class ShipyardItem
@@ -63,21 +55,6 @@ namespace ShipyardMod.ItemClasses
         public ShipyardType YardType;
         public bool StaticYard;
 
-        public List<ProcessingTargetInfo> CurrentProcessingTargets = new List<ProcessingTargetInfo>();
-
-        private string _currentStats = string.Empty;
-        public string CurrentStats
-        {
-            get { return _currentStats; }
-            set
-            {
-                _currentStats = value;
-                // Add debug logging to verify when this gets set
-                Logging.Instance.WriteDebug($"CurrentStats updated to:\n{value}");
-            }
-        }
-
-
         public ShipyardItem(MyOrientedBoundingBoxD box, IMyCubeBlock[] tools, ShipyardType yardType, IMyEntity yardEntity)
         {
             ShipyardBox = box;
@@ -98,25 +75,26 @@ namespace ShipyardMod.ItemClasses
                 return;
 
             Logging.Instance.WriteDebug("YardItem.Init: " + yardType);
+
             YardType = yardType;
 
-            // Update YardGrids without clearing ContainsGrids
-            YardGrids = ContainsGrids.Where(x => !x.MarkedForClose).ToList();
-
-            foreach (IMyCubeGrid grid in YardGrids)
+            foreach (IMyCubeGrid grid in ContainsGrids)
             {
                 ((MyCubeGrid)grid).OnGridSplit += OnGridSplit;
             }
 
+            YardGrids = ContainsGrids.Where(x => !x.MarkedForClose).ToList();
+            ContainsGrids.Clear();
+            IntersectsGrids.Clear();
             Utilities.Invoke(() =>
-            {
-                foreach (IMyCubeBlock tool in Tools)
-                {
-                    var myFunctionalBlock = tool as IMyFunctionalBlock;
-                    if (myFunctionalBlock != null)
-                        myFunctionalBlock.Enabled = true;
-                }
-            });
+                             {
+                                 foreach (IMyCubeBlock tool in Tools)
+                                 {
+                                     var myFunctionalBlock = tool as IMyFunctionalBlock;
+                                     if (myFunctionalBlock != null)
+                                         myFunctionalBlock.Enabled = true; //.RequestEnable(true);
+                                 }
+                             });
 
             Communication.SendYardState(this);
         }
@@ -125,9 +103,6 @@ namespace ShipyardMod.ItemClasses
         {
             _shouldDisable.Item1 = true;
             _shouldDisable.Item2 = broadcast;
-            YardType = ShipyardType.Disabled;
-            // Update stats to show disabled state
-            ProcessShipyardAction.UpdateShipyardStats(this);
         }
 
         public void ProcessDisable()
@@ -138,29 +113,29 @@ namespace ShipyardMod.ItemClasses
             foreach (IMyCubeGrid grid in YardGrids)
                 ((MyCubeGrid)grid).OnGridSplit -= OnGridSplit;
 
-            // Clear all processing-related collections
             YardGrids.Clear();
-            ContainsGrids.Clear();
-            IntersectsGrids.Clear();
-            TargetBlocks.Clear();
-            ProxDict.Clear();
-            MissingComponentsDict.Clear();
-            CurrentProcessingTargets.Clear();
 
-            // Clear BlocksToProcess arrays
-            foreach (var entry in BlocksToProcess)
+            foreach (IMyCubeBlock tool in Tools)
             {
-                for (int i = 0; i < entry.Value.Length; i++)
+                BlocksToProcess[tool.EntityId] = new BlockTarget[3];
+                if (YardType == ShipyardType.Invalid)
                 {
-                    entry.Value[i] = null;
+                    Utilities.Invoke(() =>
+                                     {
+                                         var comp = tool.GameLogic.GetAs<ShipyardCorner>();
+                                         comp.SetPowerUse(5);
+                                         comp.SetMaxPower(5);
+                                         comp.Shipyard = null;
+                                     });
                 }
             }
-
-            // Clear stats
-            ProcessShipyardAction.ShipyardStats.Remove(EntityId);
-
+            //TotalBlocks = 0;
+            MissingComponentsDict.Clear();
+            ContainsGrids.Clear();
+            IntersectsGrids.Clear();
+            ProxDict.Clear();
+            TargetBlocks.Clear();
             YardType = ShipyardType.Disabled;
-
             if (_shouldDisable.Item2 && MyAPIGateway.Multiplayer.IsServer)
                 Communication.SendYardState(this);
 

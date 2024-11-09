@@ -831,20 +831,31 @@ namespace ShipyardMod.ProcessHandlers
         {
             IMyProjector projector = target.Projector;
             IMySlimBlock block = target.Block;
-
+            
             if (projector == null || block == null)
                 return false;
-
+            
             if (projector.CanBuild(block, false) != BuildCheckResult.OK)
                 return false;
 
-            // Attempt to build the block, which places it into the world as a projected block
-            // but does not complete it unless components are supplied during welding
-            projector.Build(block, projector.OwnerId, projector.EntityId, false, projector.OwnerId);
+            if (MyAPIGateway.Session.CreativeMode)
+            {
+                projector.Build(block, projector.OwnerId, projector.EntityId, false, projector.OwnerId);
+                return projector.CanBuild(block, true) != BuildCheckResult.OK;
+            }
 
-            // Return true if the block is now placed into the world
-            return projector.CanBuild(block, true) != BuildCheckResult.OK;
+            //try to remove the first component from inventory
+            string name = ((MyCubeBlockDefinition)block.BlockDefinition).Components[0].Definition.Id.SubtypeName;
+            if (_tmpInventory.PullAny(item.ConnectedCargo, name, 1))
+            {
+                _tmpInventory.Clear();
+
+                projector.Build(block, projector.OwnerId, projector.EntityId, false, projector.OwnerId);
+
+                return projector.CanBuild(block, true) != BuildCheckResult.OK;
+            }
+
+            return false;
         }
-
     }
 }

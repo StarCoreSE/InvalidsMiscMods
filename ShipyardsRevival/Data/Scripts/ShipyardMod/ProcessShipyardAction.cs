@@ -5,6 +5,7 @@ using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.Game.Entities;
 using Sandbox.Game.Weapons;
+using Sandbox.Game.World;
 using Sandbox.ModAPI;
 using ShipyardMod.ItemClasses;
 using ShipyardMod.Utility;
@@ -841,12 +842,21 @@ namespace ShipyardMod.ProcessHandlers
         {
             IMyProjector projector = target.Projector;
             IMySlimBlock block = target.Block;
-            
+
             if (projector == null || block == null)
                 return false;
-            
+
+            // Check if the projector is allowed to build the block
             if (projector.CanBuild(block, false) != BuildCheckResult.OK)
                 return false;
+
+            // Verify if DLC is owned for this block, notify if missing
+            var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
+            if (blockDefinition != null && !MySession.Static.CheckDLCAndNotify(blockDefinition))
+            {
+                Logging.Instance.WriteDebug($"DLC required for block '{blockDefinition.DisplayNameText}' is not owned, skipping build.");
+                return false; // Skip this block if DLC is required but not owned
+            }
 
             if (MyAPIGateway.Session.CreativeMode)
             {
@@ -854,18 +864,17 @@ namespace ShipyardMod.ProcessHandlers
                 return projector.CanBuild(block, true) != BuildCheckResult.OK;
             }
 
-            //try to remove the first component from inventory
-            string name = ((MyCubeBlockDefinition)block.BlockDefinition).Components[0].Definition.Id.SubtypeName;
-            if (_tmpInventory.PullAny(item.ConnectedCargo, name, 1))
+            // Try to pull required components for building
+            string componentName = blockDefinition.Components[0].Definition.Id.SubtypeName;
+            if (_tmpInventory.PullAny(item.ConnectedCargo, componentName, 1))
             {
                 _tmpInventory.Clear();
-
                 projector.Build(block, projector.OwnerId, projector.EntityId, false, projector.OwnerId);
-
                 return projector.CanBuild(block, true) != BuildCheckResult.OK;
             }
 
-            return false;
+            return false; // Return false if we cannot build the block
         }
+        
     }
 }

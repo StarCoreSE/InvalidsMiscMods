@@ -10,6 +10,7 @@ using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRageMath;
+using static ShipyardMod.Utility.Profiler;
 
 namespace ShipyardMod.Utility
 {
@@ -82,6 +83,7 @@ namespace ShipyardMod.Utility
 
         public static bool PullAny(this MyInventory inventory, HashSet<IMyTerminalBlock> sourceInventories, string component, int count)
         {
+            Logging.Instance.WriteDebug($"Attempting to pull {entry.Value} of {entry.Key} from {block.CustomName}. Available: {sourceItems.Count}");
             return PullAny(inventory, sourceInventories, new Dictionary<string, int> {{component, count}});
         }
 

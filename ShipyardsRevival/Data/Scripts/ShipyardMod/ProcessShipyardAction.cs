@@ -461,6 +461,7 @@ namespace ShipyardMod.ProcessHandlers
 
         private bool StepWeld(ShipyardItem shipyardItem)
         {
+            Logging.Instance.WriteDebug($"[StepWeld] Starting for shipyard {shipyardItem.EntityId}.");
             var targetsToRemove = new HashSet<BlockTarget>();
             var targetsToRedraw = new HashSet<BlockTarget>();
 
@@ -468,8 +469,11 @@ namespace ShipyardMod.ProcessHandlers
             float weldAmount = MyAPIGateway.Session.WelderSpeedMultiplier * shipyardItem.Settings.WeldMultiplier;
             float boneAmount = weldAmount * .1f;
 
+            Logging.Instance.WriteDebug($"[StepWeld] Calculated weldAmount: {weldAmount}, boneAmount: {boneAmount}.");
+
             if (shipyardItem.TargetBlocks.Count == 0)
             {
+                Logging.Instance.WriteDebug("[StepWeld] No target blocks, populating targets.");
                 var sortBlock = Profiler.Start(FullName, nameof(StepWeld), "Sort Targets");
                 shipyardItem.TargetBlocks.Clear();
                 shipyardItem.ProxDict.Clear();
@@ -544,11 +548,16 @@ namespace ShipyardMod.ProcessHandlers
 
             //nothing to do
             if (shipyardItem.TargetBlocks.Count == 0)
+            {
+                Logging.Instance.WriteDebug($"[StepWeld] Populated {shipyardItem.TargetBlocks.Count} target blocks.");
                 return false;
-            
+            }
+
+            Logging.Instance.WriteDebug("[StepWeld] Beginning welding loop.");
             //assign blocks to our welders
             foreach (IMyCubeBlock welder in shipyardItem.Tools)
             {
+                Logging.Instance.WriteDebug($"[StepWeld] Processing welder {welder.EntityId}.");
                 for (int i = 0; i < shipyardItem.Settings.BeamCount; i++)
                 {
                     if (shipyardItem.BlocksToProcess[welder.EntityId][i] != null)
@@ -603,6 +612,7 @@ namespace ShipyardMod.ProcessHandlers
                             toRemove.Add(target);
                             continue;
                         }
+                        Logging.Instance.WriteDebug("[StepWeld] Welding loop completed.");
                         nextTarget = target;
                         break;
                     }

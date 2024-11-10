@@ -15,7 +15,6 @@ namespace ShipyardMod.ProcessHandlers
     {
         public override int GetUpdateResolution()
         {
-            Logging.Instance.WriteDebug($"ProcessConveyorCache.GetUpdateResolution called, returning 5000 ms.");
             return 5000;
         }
 

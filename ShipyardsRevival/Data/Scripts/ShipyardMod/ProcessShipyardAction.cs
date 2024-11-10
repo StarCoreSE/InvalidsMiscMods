@@ -850,31 +850,43 @@ namespace ShipyardMod.ProcessHandlers
             if (projector.CanBuild(block, false) != BuildCheckResult.OK)
                 return false;
 
-            // Verify if DLC is owned for this block, notify if missing
-            var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
-            if (blockDefinition != null && !MySession.Static.CheckDLCAndNotify(blockDefinition))
-            {
-                Logging.Instance.WriteDebug($"DLC required for block '{blockDefinition.DisplayNameText}' is not owned, skipping build.");
-                return false; // Skip this block if DLC is required but not owned
-            }
-
+            // If in Creative Mode, build the block immediately
             if (MyAPIGateway.Session.CreativeMode)
             {
-                projector.Build(block, projector.OwnerId, projector.EntityId, false, projector.OwnerId);
+                try
+                {
+                    projector.Build(block, projector.OwnerId, projector.EntityId, false, projector.OwnerId);
+                }
+                catch (NullReferenceException ex)
+                {
+                    // Log and ignore the exception to prevent a crash
+                    Logging.Instance.WriteDebug($"Build failed due to missing DLC reference: {ex.Message}");
+                    return false;
+                }
                 return projector.CanBuild(block, true) != BuildCheckResult.OK;
             }
 
-            // Try to pull required components for building
+            // Attempt to pull required components for building in survival mode
+            var blockDefinition = block.BlockDefinition as MyCubeBlockDefinition;
             string componentName = blockDefinition.Components[0].Definition.Id.SubtypeName;
             if (_tmpInventory.PullAny(item.ConnectedCargo, componentName, 1))
             {
                 _tmpInventory.Clear();
-                projector.Build(block, projector.OwnerId, projector.EntityId, false, projector.OwnerId);
+                try
+                {
+                    projector.Build(block, projector.OwnerId, projector.EntityId, false, projector.OwnerId);
+                }
+                catch (NullReferenceException ex)
+                {
+                    // Log and ignore the exception to prevent a crash
+                    Logging.Instance.WriteDebug($"Build failed due to missing DLC reference: {ex.Message}");
+                    return false;
+                }
                 return projector.CanBuild(block, true) != BuildCheckResult.OK;
             }
 
-            return false; // Return false if we cannot build the block
+            return false; // Return false if the block cannot be built
         }
-        
+
     }
 }

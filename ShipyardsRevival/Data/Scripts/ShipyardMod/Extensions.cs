@@ -83,7 +83,6 @@ namespace ShipyardMod.Utility
 
         public static bool PullAny(this MyInventory inventory, HashSet<IMyTerminalBlock> sourceInventories, string component, int count)
         {
-            Logging.Instance.WriteDebug($"Attempting to pull {entry.Value} of {entry.Key} from {block.CustomName}. Available: {sourceItems.Count}");
             return PullAny(inventory, sourceInventories, new Dictionary<string, int> {{component, count}});
         }
 

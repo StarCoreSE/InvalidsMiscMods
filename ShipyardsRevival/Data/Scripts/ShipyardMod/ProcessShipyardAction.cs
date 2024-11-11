@@ -28,7 +28,7 @@ namespace ShipyardMod.ProcessHandlers
 
         public override int GetUpdateResolution()
         {
-            return 500;
+            return 1000;
         }
 
         public override bool ServerOnly()

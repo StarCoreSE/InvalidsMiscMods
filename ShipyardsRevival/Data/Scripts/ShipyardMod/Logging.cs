@@ -1,140 +1,281 @@
-﻿using System;
-using System.IO;
+using System;
 using System.Text;
 using Sandbox.ModAPI;
+using VRage.Game;
+using VRage.Game.ModAPI;
+using VRage.ModAPI;
+using VRage.Utils;
 
-namespace ShipyardMod.Utility
+namespace SKONanobotBuildAndRepairSystem
 {
-    internal class Logging
+    public class Logging
     {
-        private static Logging _instance;
+        private readonly string _ModName;
+        private int _WorkshopId;
+        private readonly string _LogFilename;
+        private readonly Type _TypeOfMod;
 
-        private static int lineCount;
-        private static bool init;
-        private static readonly string[] log = new string[10];
-        private readonly StringBuilder _cache = new StringBuilder();
-        private readonly TextWriter _writer;
-        private int _indent;
+        private System.IO.TextWriter _Writer = null;
+        private IMyHudNotification _Notify = null;
+        private int _Indent = 0;
+        private readonly StringBuilder _Cache = new StringBuilder();
 
-        public Logging(string logFile)
+        [Flags]
+        public enum BlockNameOptions
         {
+            None = 0x0000,
+            IncludeTypename = 0x0001
+        }
+
+        [Flags]
+        public enum Level
+        {
+            Error = 0x0001,
+            Event = 0x0002,
+            Info = 0x0004,
+            Verbose = 0x0008,
+            Special1 = 0x100000,
+            Communication = 0x1000,
+            All = 0xFFFF
+        }
+
+        public static string BlockName(object block)
+        {
+            return BlockName(block, BlockNameOptions.IncludeTypename);
+        }
+
+        public static string BlockName(object block, BlockNameOptions options)
+        {
+            var inventory = block as IMyInventory;
+            if (inventory != null)
+            {
+                block = inventory.Owner;
+            }
+
+            var slimBlock = block as IMySlimBlock;
+            if (slimBlock != null)
+            {
+                if (slimBlock.FatBlock != null) block = slimBlock.FatBlock;
+                else
+                {
+                    return
+                        $"{(slimBlock.CubeGrid != null ? slimBlock.CubeGrid.DisplayName : "Unknown Grid")}.{slimBlock.BlockDefinition.DisplayNameText}";
+                }
+            }
+
+            var terminalBlock = block as IMyTerminalBlock;
+            if (terminalBlock != null)
+            {
+                if ((options & BlockNameOptions.IncludeTypename) != 0) return
+                    $"{(terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid")}.{terminalBlock.CustomName} [{terminalBlock.BlockDefinition.TypeIdString}]";
+                return
+                    $"{(terminalBlock.CubeGrid != null ? terminalBlock.CubeGrid.DisplayName : "Unknown Grid")}.{terminalBlock.CustomName}";
+            }
+
+            var cubeBlock = block as IMyCubeBlock;
+            if (cubeBlock != null)
+            {
+                return
+                    $"{(cubeBlock.CubeGrid != null ? cubeBlock.CubeGrid.DisplayName : "Unknown Grid")} [{cubeBlock.BlockDefinition.TypeIdString}/{cubeBlock.BlockDefinition.SubtypeName}]";
+            }
+
+            var entity = block as IMyEntity;
+            if (entity != null)
+            {
+                if ((options & BlockNameOptions.IncludeTypename) != 0) return
+                    $"{(string.IsNullOrEmpty(entity.DisplayName) ? entity.GetFriendlyName() : entity.DisplayName)} ({entity.EntityId}) [{entity.GetType().Name}]";
+                return $"{entity.DisplayName} ({entity.EntityId})";
+            }
+
+            return block != null ? block.ToString() : "NULL";
+        }
+
+        public Level LogLevel { get; set; }
+
+        public bool EnableHudNotification { get; set; }
+
+        /// <summary>
+        ///
+        /// </summary>
+        public Logging(string modName, int workshopId, string logFileName, Type typeOfMod)
+        {
+            MyLog.Default.WriteLineAndConsole(_ModName + " Create Log instance Utils=" + (MyAPIGateway.Utilities != null).ToString());
+            _ModName = modName;
+            _WorkshopId = workshopId;
+            _LogFilename = logFileName;
+            _TypeOfMod = typeOfMod;
+        }
+
+        /// <summary>
+        /// Precheckl to avoid retriveing large amout of data,
+        /// that might be not needed afterwards
+        /// </summary>
+        /// <param name="level"></param>
+        /// <returns></returns>
+        public bool ShouldLog(Level level)
+        {
+            return (LogLevel & level) != 0;
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        public void IncreaseIndent(Level level)
+        {
+            if ((LogLevel & level) != 0) _Indent++;
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        public void DecreaseIndent(Level level)
+        {
+            if ((LogLevel & level) != 0)
+                if (_Indent > 0) _Indent--;
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        public void ResetIndent(Level level)
+        {
+            if ((LogLevel & level) != 0) _Indent = 0;
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        public void Error(Exception e)
+        {
+            Error(e.ToString());
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        public void Error(string msg, params object[] args)
+        {
+            Error(string.Format(msg, args));
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        private void Error(string msg)
+        {
+            if ((LogLevel & Level.Error) == 0) return;
+
+            Write("ERROR: " + msg);
+
             try
             {
-                _writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(logFile, typeof(Logging));
-                _instance = this;
+                MyLog.Default.WriteLineAndConsole(_ModName + " error: " + msg);
+
+                var text = _ModName + " error - open %AppData%/SpaceEngineers/Storage/" + _LogFilename + " for details";
+
+                if (EnableHudNotification)
+                {
+                    ShowOnHud(text);
+                }
             }
-            catch
+            catch (Exception e)
             {
+                Write(string.Format("ERROR: Could not send notification to local client: " + e.ToString()));
             }
         }
 
-        public static Logging Instance
+        /// <summary>
+        ///
+        /// </summary>
+        public void Write(Level level, string msg, params Object[] args)
         {
-            get
-            {
-                if (MyAPIGateway.Utilities == null)
-                    return null;
+            if ((LogLevel & level) == 0) return;
+            Write(string.Format(msg, args));
+        }
 
-                if (_instance == null)
+        /// <summary>
+        ///
+        /// </summary>
+        public void Write(string msg, params Object[] args)
+        {
+            Write(string.Format(msg, args));
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        private void Write(string msg)
+        {
+            try
+            {
+                lock (_Cache)
                 {
-                    _instance = new Logging("ShipyardMod.log");
+                    _Cache.Append(DateTime.Now.ToString("u") + ":");
+
+                    for (var i = 0; i < _Indent; i++)
+                    {
+                        _Cache.Append("   ");
+                    }
+
+                    _Cache.Append(msg).AppendLine();
+
+                    if (_Writer == null && MyAPIGateway.Utilities != null)
+                    {
+                        _Writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(_LogFilename, _TypeOfMod);
+                    }
+
+                    if (_Writer != null)
+                    {
+                        _Writer.Write(_Cache);
+                        _Writer.Flush();
+                        _Cache.Clear();
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                MyLog.Default.WriteLineAndConsole(_ModName + " Error while logging message='" + msg + "'\nLogger error: " + e.Message + "\n" + e.StackTrace);
+            }
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="text"></param>
+        /// <param name="displayms"></param>
+        public void ShowOnHud(string text, int displayms = 10000)
+        {
+            if (_Notify == null)
+            {
+                _Notify = MyAPIGateway.Utilities.CreateNotification(text, displayms, MyFontEnum.Red);
+            }
+            else
+            {
+                _Notify.Text = text;
+                _Notify.ResetAliveTime();
+            }
+
+            _Notify.Show();
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        public void Close()
+        {
+            lock (_Cache)
+            {
+                if (_Writer != null)
+                {
+                    _Writer.Flush();
+                    _Writer.Close();
+                    _Writer.Dispose();
+                    _Writer = null;
                 }
 
-                return _instance;
+                _Indent = 0;
+                _Cache.Clear();
             }
-        }
-
-        public void IncreaseIndent()
-        {
-            _indent++;
-        }
-
-        public void DecreaseIndent()
-        {
-            if (_indent > 0)
-                _indent--;
-        }
-
-        public void WriteLine(string text)
-        {
-            try
-            {
-                if (_cache.Length > 0)
-                    _writer.WriteLine(_cache);
-
-                _cache.Clear();
-                _cache.Append(DateTime.Now.ToString("[HH:mm:ss:ffff] "));
-                for (int i = 0; i < _indent; i++)
-                    _cache.Append("\t");
-
-                _writer.WriteLine(_cache.Append(text));
-                _writer.Flush();
-                _cache.Clear();
-            }
-            catch
-            {
-                //logger failed, all hope is lost
-            }
-        }
-
-        public void WriteDebug(string text)
-        {
-            if (ShipyardCore.Debug)
-                WriteLine(text);
-        }
-
-        public void Debug_obj(string text)
-        {
-            if (!ShipyardCore.Debug)
-                return;
-
-            WriteLine("\tDEBUG_OBJ: " + text);
-
-            //server can't show objectives. probably.
-            if (MyAPIGateway.Session.Player == null)
-                return;
-
-            //I'm the only one that needs to see this
-            if (MyAPIGateway.Session.Player.SteamUserId != 76561197996829390)
-                return;
-
-            text = $"{DateTime.Now.ToString("[HH:mm:ss:ffff]")}: {text}";
-
-            if (!init)
-            {
-                init = true;
-                MyAPIGateway.Utilities.GetObjectiveLine().Title = "Shipyard debug";
-                MyAPIGateway.Utilities.GetObjectiveLine().Objectives.Clear();
-                MyAPIGateway.Utilities.GetObjectiveLine().Objectives.Add("Start");
-                MyAPIGateway.Utilities.GetObjectiveLine().Show();
-            }
-            if (lineCount > 9)
-                lineCount = 0;
-            log[lineCount] = text;
-            string[] oldLog = log;
-            for (int i = 0; i < 9; i++)
-            {
-                log[i] = oldLog[i + 1];
-            }
-            log[9] = text;
-
-            MyAPIGateway.Utilities.GetObjectiveLine().Objectives[0] = string.Join("\r\n", log);
-            lineCount++;
-        }
-
-        public void Write(string text)
-        {
-            _cache.Append(text);
-        }
-
-
-        internal void Close()
-        {
-            if (_cache.Length > 0)
-                _writer.WriteLine(_cache);
-
-            _writer.Flush();
-            _writer.Close();
         }
     }
 }

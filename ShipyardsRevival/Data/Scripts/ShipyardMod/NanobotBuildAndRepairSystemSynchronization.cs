@@ -87,7 +87,7 @@ namespace SKONanobotBuildAndRepairSystem
         {
             DisableLocalization = false;
             LogLevel = Logging.Level.Error; //Default
-            MaxBackgroundTasks = NanobotBuildAndRepairSystemMod.MaxBackgroundTasks_Default;
+            MaxBackgroundTasks = BaRYardMod.MaxBackgroundTasks_Default;
             TargetsUpdateInterval = TimeSpan.FromSeconds(10);
             SourcesUpdateInterval = TimeSpan.FromSeconds(60);
             FriendlyDamageTimeout = TimeSpan.FromSeconds(60);
@@ -124,14 +124,14 @@ namespace SKONanobotBuildAndRepairSystem
                 if (settings != null)
                 {
                     var adjusted = AdjustSettings(settings);
-                    if (settings.MaxBackgroundTasks > NanobotBuildAndRepairSystemMod.MaxBackgroundTasks_Max)
+                    if (settings.MaxBackgroundTasks > BaRYardMod.MaxBackgroundTasks_Max)
                     {
-                        settings.MaxBackgroundTasks = NanobotBuildAndRepairSystemMod.MaxBackgroundTasks_Max;
+                        settings.MaxBackgroundTasks = BaRYardMod.MaxBackgroundTasks_Max;
                         adjusted = true;
                     }
-                    else if (settings.MaxBackgroundTasks < NanobotBuildAndRepairSystemMod.MaxBackgroundTasks_Min)
+                    else if (settings.MaxBackgroundTasks < BaRYardMod.MaxBackgroundTasks_Min)
                     {
-                        settings.MaxBackgroundTasks = NanobotBuildAndRepairSystemMod.MaxBackgroundTasks_Min;
+                        settings.MaxBackgroundTasks = BaRYardMod.MaxBackgroundTasks_Min;
                         adjusted = true;
                     }
 
@@ -1080,14 +1080,14 @@ namespace SKONanobotBuildAndRepairSystem
         {
             var scale = system?.Welder != null ? system.Welder.BlockDefinition.SubtypeName.Contains("Large") ? 1f : 3f : 1f;
 
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.AreaOffsetFixed || init)
+            if (BaRYardMod.Settings.Welder.AreaOffsetFixed || init)
             {
                 MaximumOffset = 0;
                 AreaOffset = new Vector3(0, 0, 0);
             }
             else
             {
-                MaximumOffset = (int)Math.Ceiling(NanobotBuildAndRepairSystemMod.Settings.MaximumOffset / scale);
+                MaximumOffset = (int)Math.Ceiling(BaRYardMod.Settings.MaximumOffset / scale);
                 if (AreaOffset.X > MaximumOffset || init) AreaOffset = new Vector3(init ? 0 : (float)MaximumOffset, AreaOffset.Y, AreaOffset.Z);
                 else if (AreaOffset.X < -MaximumOffset || init) AreaOffset = new Vector3(init ? 0 : (float)-MaximumOffset, AreaOffset.Y, AreaOffset.Z);
 
@@ -1098,8 +1098,8 @@ namespace SKONanobotBuildAndRepairSystem
                 else if (AreaOffset.Z < -MaximumOffset || init) AreaOffset = new Vector3(AreaOffset.X, AreaOffset.Y, init ? 0 : (float)-MaximumOffset);
             }
 
-            MaximumRange = (int)Math.Ceiling(NanobotBuildAndRepairSystemMod.Settings.Range * 2 / scale);
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.AreaSizeFixed || init)
+            MaximumRange = (int)Math.Ceiling(BaRYardMod.Settings.Range * 2 / scale);
+            if (BaRYardMod.Settings.Welder.AreaSizeFixed || init)
             {
                 AreaSize = new Vector3(MaximumRange, MaximumRange, MaximumRange);
             }
@@ -1110,80 +1110,80 @@ namespace SKONanobotBuildAndRepairSystem
                 if (AreaSize.Z > MaximumRange || init) AreaSize = new Vector3(AreaSize.X, AreaSize.Y, MaximumRange);
             }
 
-            MaximumRequiredElectricPowerStandby = NanobotBuildAndRepairSystemMod.Settings.MaximumRequiredElectricPowerStandby / scale;
-            MaximumRequiredElectricPowerTransport = NanobotBuildAndRepairSystemMod.Settings.MaximumRequiredElectricPowerTransport / scale;
-            MaximumRequiredElectricPowerWelding = NanobotBuildAndRepairSystemMod.Settings.Welder.MaximumRequiredElectricPowerWelding / scale;
-            MaximumRequiredElectricPowerGrinding = NanobotBuildAndRepairSystemMod.Settings.Welder.MaximumRequiredElectricPowerGrinding / scale;
+            MaximumRequiredElectricPowerStandby = BaRYardMod.Settings.MaximumRequiredElectricPowerStandby / scale;
+            MaximumRequiredElectricPowerTransport = BaRYardMod.Settings.MaximumRequiredElectricPowerTransport / scale;
+            MaximumRequiredElectricPowerWelding = BaRYardMod.Settings.Welder.MaximumRequiredElectricPowerWelding / scale;
+            MaximumRequiredElectricPowerGrinding = BaRYardMod.Settings.Welder.MaximumRequiredElectricPowerGrinding / scale;
 
-            var maxMultiplier = Math.Max(NanobotBuildAndRepairSystemMod.Settings.Welder.WeldingMultiplier, NanobotBuildAndRepairSystemMod.Settings.Welder.GrindingMultiplier);
-            TransportSpeed = maxMultiplier * NanobotBuildAndRepairSystemBlock.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT * Math.Min(NanobotBuildAndRepairSystemMod.Settings.Range / NanobotBuildAndRepairSystemBlock.WELDER_RANGE_DEFAULT_IN_M, 4.0f);
+            var maxMultiplier = Math.Max(BaRYardMod.Settings.Welder.WeldingMultiplier, BaRYardMod.Settings.Welder.GrindingMultiplier);
+            TransportSpeed = maxMultiplier * NanobotBuildAndRepairSystemBlock.WELDER_TRANSPORTSPEED_METER_PER_SECOND_DEFAULT * Math.Min(BaRYardMod.Settings.Range / NanobotBuildAndRepairSystemBlock.WELDER_RANGE_DEFAULT_IN_M, 4.0f);
 
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.AllowBuildFixed || init)
+            if (BaRYardMod.Settings.Welder.AllowBuildFixed || init)
             {
-                Flags = (Flags & ~Settings.AllowBuild) | (NanobotBuildAndRepairSystemMod.Settings.Welder.AllowBuildDefault ? Settings.AllowBuild : 0);
+                Flags = (Flags & ~Settings.AllowBuild) | (BaRYardMod.Settings.Welder.AllowBuildDefault ? Settings.AllowBuild : 0);
             }
 
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.UseIgnoreColorFixed || init)
+            if (BaRYardMod.Settings.Welder.UseIgnoreColorFixed || init)
             {
-                Flags = (Flags & ~Settings.UseIgnoreColor) | (NanobotBuildAndRepairSystemMod.Settings.Welder.UseIgnoreColorDefault ? Settings.UseIgnoreColor : 0);
-                if (NanobotBuildAndRepairSystemMod.Settings.Welder.IgnoreColorDefault != null && NanobotBuildAndRepairSystemMod.Settings.Welder.IgnoreColorDefault.Length >= 3)
+                Flags = (Flags & ~Settings.UseIgnoreColor) | (BaRYardMod.Settings.Welder.UseIgnoreColorDefault ? Settings.UseIgnoreColor : 0);
+                if (BaRYardMod.Settings.Welder.IgnoreColorDefault != null && BaRYardMod.Settings.Welder.IgnoreColorDefault.Length >= 3)
                 {
-                    IgnoreColor = new Vector3D(NanobotBuildAndRepairSystemMod.Settings.Welder.IgnoreColorDefault[0] / 360f,
-                                              (float)Math.Round(NanobotBuildAndRepairSystemMod.Settings.Welder.IgnoreColorDefault[1], 1, MidpointRounding.AwayFromZero) / 100f - NanobotBuildAndRepairSystemTerminal.SATURATION_DELTA,
-                                              (float)Math.Round(NanobotBuildAndRepairSystemMod.Settings.Welder.IgnoreColorDefault[2], 1, MidpointRounding.AwayFromZero) / 100f - NanobotBuildAndRepairSystemTerminal.VALUE_DELTA + NanobotBuildAndRepairSystemTerminal.VALUE_COLORIZE_DELTA);
+                    IgnoreColor = new Vector3D(BaRYardMod.Settings.Welder.IgnoreColorDefault[0] / 360f,
+                                              (float)Math.Round(BaRYardMod.Settings.Welder.IgnoreColorDefault[1], 1, MidpointRounding.AwayFromZero) / 100f - NanobotBuildAndRepairSystemTerminal.SATURATION_DELTA,
+                                              (float)Math.Round(BaRYardMod.Settings.Welder.IgnoreColorDefault[2], 1, MidpointRounding.AwayFromZero) / 100f - NanobotBuildAndRepairSystemTerminal.VALUE_DELTA + NanobotBuildAndRepairSystemTerminal.VALUE_COLORIZE_DELTA);
                 }
             }
 
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.UseGrindColorFixed || init)
+            if (BaRYardMod.Settings.Welder.UseGrindColorFixed || init)
             {
-                Flags = (Flags & ~Settings.UseGrindColor) | (NanobotBuildAndRepairSystemMod.Settings.Welder.UseGrindColorDefault ? Settings.UseGrindColor : 0);
-                if (NanobotBuildAndRepairSystemMod.Settings.Welder.GrindColorDefault != null && NanobotBuildAndRepairSystemMod.Settings.Welder.GrindColorDefault.Length >= 3)
+                Flags = (Flags & ~Settings.UseGrindColor) | (BaRYardMod.Settings.Welder.UseGrindColorDefault ? Settings.UseGrindColor : 0);
+                if (BaRYardMod.Settings.Welder.GrindColorDefault != null && BaRYardMod.Settings.Welder.GrindColorDefault.Length >= 3)
                 {
-                    GrindColor = new Vector3D(NanobotBuildAndRepairSystemMod.Settings.Welder.GrindColorDefault[0] / 360f,
-                                              (float)Math.Round(NanobotBuildAndRepairSystemMod.Settings.Welder.GrindColorDefault[1], 1, MidpointRounding.AwayFromZero) / 100f - NanobotBuildAndRepairSystemTerminal.SATURATION_DELTA,
-                                              (float)Math.Round(NanobotBuildAndRepairSystemMod.Settings.Welder.GrindColorDefault[2], 1, MidpointRounding.AwayFromZero) / 100f - NanobotBuildAndRepairSystemTerminal.VALUE_DELTA + NanobotBuildAndRepairSystemTerminal.VALUE_COLORIZE_DELTA);
+                    GrindColor = new Vector3D(BaRYardMod.Settings.Welder.GrindColorDefault[0] / 360f,
+                                              (float)Math.Round(BaRYardMod.Settings.Welder.GrindColorDefault[1], 1, MidpointRounding.AwayFromZero) / 100f - NanobotBuildAndRepairSystemTerminal.SATURATION_DELTA,
+                                              (float)Math.Round(BaRYardMod.Settings.Welder.GrindColorDefault[2], 1, MidpointRounding.AwayFromZero) / 100f - NanobotBuildAndRepairSystemTerminal.VALUE_DELTA + NanobotBuildAndRepairSystemTerminal.VALUE_COLORIZE_DELTA);
                 }
             }
 
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.UseGrindJanitorFixed || init)
+            if (BaRYardMod.Settings.Welder.UseGrindJanitorFixed || init)
             {
-                UseGrindJanitorOn = NanobotBuildAndRepairSystemMod.Settings.Welder.UseGrindJanitorDefault;
-                GrindJanitorOptions = NanobotBuildAndRepairSystemMod.Settings.Welder.GrindJanitorOptionsDefault;
+                UseGrindJanitorOn = BaRYardMod.Settings.Welder.UseGrindJanitorDefault;
+                GrindJanitorOptions = BaRYardMod.Settings.Welder.GrindJanitorOptionsDefault;
             }
 
-            UseGrindJanitorOn &= NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedGrindJanitorRelations;
+            UseGrindJanitorOn &= BaRYardMod.Settings.Welder.AllowedGrindJanitorRelations;
 
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.ShowAreaFixed || init) Flags = Flags & ~Settings.ShowArea;
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.PushIngotOreImmediatelyFixed || init) Flags = (Flags & ~Settings.PushIngotOreImmediately) | (NanobotBuildAndRepairSystemMod.Settings.Welder.PushIngotOreImmediatelyDefault ? Settings.PushIngotOreImmediately : 0);
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.PushComponentImmediatelyFixed || init) Flags = (Flags & ~Settings.PushComponentImmediately) | (NanobotBuildAndRepairSystemMod.Settings.Welder.PushComponentImmediatelyDefault ? Settings.PushComponentImmediately : 0);
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.PushItemsImmediatelyFixed || init) Flags = (Flags & ~Settings.PushItemsImmediately) | (NanobotBuildAndRepairSystemMod.Settings.Welder.PushItemsImmediatelyDefault ? Settings.PushItemsImmediately : 0);
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.CollectIfIdleFixed || init) Flags = (Flags & ~Settings.ComponentCollectIfIdle) | (NanobotBuildAndRepairSystemMod.Settings.Welder.CollectIfIdleDefault ? Settings.ComponentCollectIfIdle : 0);
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.SoundVolumeFixed || init) SoundVolume = NanobotBuildAndRepairSystemMod.Settings.Welder.SoundVolumeDefault;
-            if (NanobotBuildAndRepairSystemMod.Settings.Welder.ScriptControllFixed || init) Flags = Flags & ~Settings.ScriptControlled;
-            if ((NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedSearchModes & SearchMode) == 0 || init)
+            if (BaRYardMod.Settings.Welder.ShowAreaFixed || init) Flags = Flags & ~Settings.ShowArea;
+            if (BaRYardMod.Settings.Welder.PushIngotOreImmediatelyFixed || init) Flags = (Flags & ~Settings.PushIngotOreImmediately) | (BaRYardMod.Settings.Welder.PushIngotOreImmediatelyDefault ? Settings.PushIngotOreImmediately : 0);
+            if (BaRYardMod.Settings.Welder.PushComponentImmediatelyFixed || init) Flags = (Flags & ~Settings.PushComponentImmediately) | (BaRYardMod.Settings.Welder.PushComponentImmediatelyDefault ? Settings.PushComponentImmediately : 0);
+            if (BaRYardMod.Settings.Welder.PushItemsImmediatelyFixed || init) Flags = (Flags & ~Settings.PushItemsImmediately) | (BaRYardMod.Settings.Welder.PushItemsImmediatelyDefault ? Settings.PushItemsImmediately : 0);
+            if (BaRYardMod.Settings.Welder.CollectIfIdleFixed || init) Flags = (Flags & ~Settings.ComponentCollectIfIdle) | (BaRYardMod.Settings.Welder.CollectIfIdleDefault ? Settings.ComponentCollectIfIdle : 0);
+            if (BaRYardMod.Settings.Welder.SoundVolumeFixed || init) SoundVolume = BaRYardMod.Settings.Welder.SoundVolumeDefault;
+            if (BaRYardMod.Settings.Welder.ScriptControllFixed || init) Flags = Flags & ~Settings.ScriptControlled;
+            if ((BaRYardMod.Settings.Welder.AllowedSearchModes & SearchMode) == 0 || init)
             {
-                if ((NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedSearchModes & NanobotBuildAndRepairSystemMod.Settings.Welder.SearchModeDefault) != 0)
+                if ((BaRYardMod.Settings.Welder.AllowedSearchModes & BaRYardMod.Settings.Welder.SearchModeDefault) != 0)
                 {
-                    SearchMode = NanobotBuildAndRepairSystemMod.Settings.Welder.SearchModeDefault;
-                }
-                else
-                {
-                    if ((NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedSearchModes & SearchModes.Grids) != 0) SearchMode = SearchModes.Grids;
-                    else if ((NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedSearchModes & SearchModes.BoundingBox) != 0) SearchMode = SearchModes.BoundingBox;
-                }
-            }
-
-            if ((NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedWorkModes & WorkMode) == 0 || init)
-            {
-                if ((NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedWorkModes & NanobotBuildAndRepairSystemMod.Settings.Welder.WorkModeDefault) != 0)
-                {
-                    WorkMode = NanobotBuildAndRepairSystemMod.Settings.Welder.WorkModeDefault;
+                    SearchMode = BaRYardMod.Settings.Welder.SearchModeDefault;
                 }
                 else
                 {
-                    if ((NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedWorkModes & WorkModes.WeldBeforeGrind) != 0) WorkMode = WorkModes.WeldBeforeGrind;
-                    else if ((NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedWorkModes & WorkModes.GrindBeforeWeld) != 0) WorkMode = WorkModes.GrindBeforeWeld;
-                    else if ((NanobotBuildAndRepairSystemMod.Settings.Welder.AllowedWorkModes & WorkModes.GrindIfWeldGetStuck) != 0) WorkMode = WorkModes.GrindIfWeldGetStuck;
+                    if ((BaRYardMod.Settings.Welder.AllowedSearchModes & SearchModes.Grids) != 0) SearchMode = SearchModes.Grids;
+                    else if ((BaRYardMod.Settings.Welder.AllowedSearchModes & SearchModes.BoundingBox) != 0) SearchMode = SearchModes.BoundingBox;
+                }
+            }
+
+            if ((BaRYardMod.Settings.Welder.AllowedWorkModes & WorkMode) == 0 || init)
+            {
+                if ((BaRYardMod.Settings.Welder.AllowedWorkModes & BaRYardMod.Settings.Welder.WorkModeDefault) != 0)
+                {
+                    WorkMode = BaRYardMod.Settings.Welder.WorkModeDefault;
+                }
+                else
+                {
+                    if ((BaRYardMod.Settings.Welder.AllowedWorkModes & WorkModes.WeldBeforeGrind) != 0) WorkMode = WorkModes.WeldBeforeGrind;
+                    else if ((BaRYardMod.Settings.Welder.AllowedWorkModes & WorkModes.GrindBeforeWeld) != 0) WorkMode = WorkModes.GrindBeforeWeld;
+                    else if ((BaRYardMod.Settings.Welder.AllowedWorkModes & WorkModes.GrindIfWeldGetStuck) != 0) WorkMode = WorkModes.GrindIfWeldGetStuck;
                 }
             }
         }

@@ -13,7 +13,7 @@ namespace SKONanobotBuildAndRepairSystem
 
     internal static class Mod
     {
-        public static Logging Log = new Logging("NanobotBuildAndRepairSystem", 0, "NanobotBuildAndRepairSystem.log", typeof(NanobotBuildAndRepairSystemMod))
+        public static Logging Log = new Logging("NanobotBuildAndRepairSystem", 0, "NanobotBuildAndRepairSystem.log", typeof(BaRYardMod))
         {
             LogLevel = Logging.Level.Error, //Default
             EnableHudNotification = false
@@ -23,7 +23,7 @@ namespace SKONanobotBuildAndRepairSystem
     }
 
     [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
-    public class NanobotBuildAndRepairSystemMod : MySessionComponentBase
+    public class BaRYardMod : MySessionComponentBase
     {
         private const string Version = "V2.1.5 2020-04-12"
         ;
@@ -55,7 +55,7 @@ namespace SKONanobotBuildAndRepairSystem
         private static readonly TimeSpan SourcesAndTargetsUpdateTimerInterval = new TimeSpan(0, 0, 2);
         private static TimeSpan _LastSyncModDataRequestSend;
 
-        public static Guid ModGuid = new Guid("8B57046C-DA20-4DE1-8E35-513FD21E3B9F");
+        public static Guid ModGuid = new Guid("8B57046C-DA20-4DE1-8E35-513FD21E3B9A");
         public const int MaxBackgroundTasks_Default = 4;
         public const int MaxBackgroundTasks_Max = 10;
         public const int MaxBackgroundTasks_Min = 1;
@@ -284,7 +284,7 @@ namespace SKONanobotBuildAndRepairSystem
             }
             catch (Exception e)
             {
-                Mod.Log.Error("NanobotBuildAndRepairSystemMod.UnloadData: {0}", e.ToString());
+                Mod.Log.Error("BaRYardMod.UnloadData: {0}", e.ToString());
             }
             base.UnloadData();
         }

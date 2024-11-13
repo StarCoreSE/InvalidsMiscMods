@@ -38,6 +38,11 @@ namespace ShipyardMod.ProcessHandlers
 
         public override void Handle()
         {
+            if (ProcessShipyardDetection.ShipyardsList.Count == 0)
+            {
+                Logging.Instance.WriteDebug("[ProcessConveyorCache] No shipyards to process");
+                return;
+            }
             foreach (ShipyardItem item in ProcessShipyardDetection.ShipyardsList)
             {
                 item.ProcessDisable();
@@ -462,7 +467,7 @@ namespace ShipyardMod.ProcessHandlers
 
         private bool StepWeld(ShipyardItem shipyardItem)
         {
-            Logging.Instance.WriteDebug($"[StepWeld] Starting for shipyard {shipyardItem.EntityId}.");
+            Logging.Instance.WriteLine($"[StepWeld] Starting weld cycle for yard {shipyardItem.EntityId}");
             var targetsToRemove = new HashSet<BlockTarget>();
             var targetsToRedraw = new HashSet<BlockTarget>();
 
@@ -474,7 +479,7 @@ namespace ShipyardMod.ProcessHandlers
 
             if (shipyardItem.TargetBlocks.Count == 0)
             {
-                Logging.Instance.WriteDebug("[StepWeld] No target blocks, populating targets.");
+                Logging.Instance.WriteLine("[StepWeld] No target blocks, starting scan");
                 var sortBlock = Profiler.Start(FullName, nameof(StepWeld), "Sort Targets");
                 shipyardItem.TargetBlocks.Clear();
                 shipyardItem.ProxDict.Clear();
@@ -522,6 +527,7 @@ namespace ShipyardMod.ProcessHandlers
                         }
                     }
                     */
+                    Logging.Instance.WriteLine($"[StepWeld] Found {shipyardItem.TargetBlocks.Count} blocks to weld");
                 }
                 int count = 0;
                 foreach (KeyValuePair<long, List<BlockTarget>> entry in gridTargets)
@@ -558,7 +564,7 @@ namespace ShipyardMod.ProcessHandlers
             //assign blocks to our welders
             foreach (IMyCubeBlock welder in shipyardItem.Tools)
             {
-                Logging.Instance.WriteDebug($"[StepWeld] Processing welder {welder.EntityId}.");
+                Logging.Instance.WriteLine($"[StepWeld] Processing welder {welder.EntityId}");
                 for (int i = 0; i < shipyardItem.Settings.BeamCount; i++)
                 {
                     if (shipyardItem.BlocksToProcess[welder.EntityId][i] != null)
@@ -610,6 +616,7 @@ namespace ShipyardMod.ProcessHandlers
                         }
                         if (target.Block.IsFullIntegrity && !target.Block.HasDeformation)
                         {
+                            Logging.Instance.WriteLine($"[StepWeld] Block at {target.GridPosition} is already complete");
                             toRemove.Add(target);
                             continue;
                         }

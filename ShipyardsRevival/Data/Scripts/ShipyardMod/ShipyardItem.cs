@@ -71,6 +71,7 @@ namespace ShipyardMod.ItemClasses
 
         public void Init(ShipyardType yardType)
         {
+            Logging.Instance.WriteLine($"[ShipyardItem.Init] Starting initialization for yard {EntityId} to type {yardType}");
             if (YardType == yardType)
                 return;
 

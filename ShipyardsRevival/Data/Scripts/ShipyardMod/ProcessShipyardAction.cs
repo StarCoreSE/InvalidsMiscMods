@@ -192,286 +192,318 @@ namespace ShipyardMod.ProcessHandlers
 
         private void StepGrind(ShipyardItem shipyardItem)
         {
-            var targetsToRedraw = new HashSet<BlockTarget>();
-            //we need to multiply this by MyShipGrinderConstants.GRINDER_AMOUNT_PER_SECOND / 2... which evaluates to 1
-            float grindAmount = MyAPIGateway.Session.GrinderSpeedMultiplier * shipyardItem.Settings.GrindMultiplier;
-            if (shipyardItem.TargetBlocks.Count == 0)
+            try
             {
-                var targetblock = Profiler.Start(FullName, nameof(StepGrind), "Populate target blocks");
-                var blocks = new List<IMySlimBlock>();
-                Logging.Instance.WriteLine(shipyardItem.YardGrids.Count.ToString());
-                foreach (IMyCubeGrid yardGrid in shipyardItem.YardGrids.Where(g => g.Physics != null)) //don't process projections
+                Logging.Instance.WriteDebug($"[StepGrind] Starting grind cycle for yard {shipyardItem.EntityId}");
+                var targetsToRedraw = new HashSet<BlockTarget>();
+                //we need to multiply this by MyShipGrinderConstants.GRINDER_AMOUNT_PER_SECOND / 2... which evaluates to 1
+                float grindAmount = MyAPIGateway.Session.GrinderSpeedMultiplier * shipyardItem.Settings.GrindMultiplier;
+
+                if (shipyardItem.TargetBlocks.Count == 0)
                 {
-                    var tmpBlocks = new List<IMySlimBlock>();
-                    yardGrid.GetBlocks(tmpBlocks);
-                    blocks.AddRange(tmpBlocks);
+                    var targetblock = Profiler.Start(FullName, nameof(StepGrind), "Populate target blocks");
+                    var blocks = new List<IMySlimBlock>();
+                    Logging.Instance.WriteLine(shipyardItem.YardGrids.Count.ToString());
+                    foreach (IMyCubeGrid yardGrid in shipyardItem.YardGrids.Where(g => g.Physics != null)) //don't process projections
+                    {
+                        if (yardGrid.Closed || yardGrid.MarkedForClose)
+                        {
+                            Logging.Instance.WriteDebug($"[StepGrind] Skipping closed grid {yardGrid.EntityId}");
+                            continue;
+                        }
+
+                        var tmpBlocks = new List<IMySlimBlock>();
+                        yardGrid.GetBlocks(tmpBlocks);
+                        blocks.AddRange(tmpBlocks);
+                    }
+
+                    foreach (IMySlimBlock tmpBlock in blocks.Where(b => b != null && !b.IsFullyDismounted))
+                    {
+                        shipyardItem.TargetBlocks.Add(new BlockTarget(tmpBlock, shipyardItem));
+                    }
+                    targetblock.End();
                 }
 
-                foreach (IMySlimBlock tmpBlock in blocks)
-                    shipyardItem.TargetBlocks.Add(new BlockTarget(tmpBlock, shipyardItem));
-                targetblock.End();
-            }
-            List<BlockTarget> allBlocks = shipyardItem.TargetBlocks.ToList();
+                List<BlockTarget> allBlocks = shipyardItem.TargetBlocks.ToList();
+                if (allBlocks.Count == 0)
+                    return;
 
-            if (allBlocks.Count == 0)
-                return;
+                if (!shipyardItem.ProxDict.Any())
+                {
+                    //sort blocks by distance to each tool
+                    foreach (IMyCubeBlock tool in shipyardItem.Tools)
+                    {
+                        var targetSortBlock = Profiler.Start(FullName, nameof(StepGrind), "Sort Targets");
+                        List<BlockTarget> sortTargets = allBlocks.ToList();
+                        sortTargets.Sort((a, b) => a.ToolDist[tool.EntityId].CompareTo(b.ToolDist[tool.EntityId]));
+                        shipyardItem.ProxDict[tool.EntityId] = sortTargets;
+                        targetSortBlock.End();
+                    }
+                }
 
-            if (!shipyardItem.ProxDict.Any())
-            {
-                //sort blocks by distance to each tool
+                var targetFindBlock = Profiler.Start(FullName, nameof(StepGrind), "Find Targets");
                 foreach (IMyCubeBlock tool in shipyardItem.Tools)
                 {
-                    var targetSortBlock = Profiler.Start(FullName, nameof(StepGrind), "Sort Targets");
-                    List<BlockTarget> sortTargets = allBlocks.ToList();
-                    sortTargets.Sort((a, b) => a.ToolDist[tool.EntityId].CompareTo(b.ToolDist[tool.EntityId]));
-                    shipyardItem.ProxDict[tool.EntityId] = sortTargets;
-                    targetSortBlock.End();
-                }
-            }
-
-            var targetFindBlock = Profiler.Start(FullName, nameof(StepGrind), "Find Targets");
-            foreach (IMyCubeBlock tool in shipyardItem.Tools)
-            {
-                if (tool.Closed || tool.MarkedForClose)
-                {
-                    //this is bad
-                    shipyardItem.Disable();
-                    return;
-                }
-
-                BlockTarget[] blockArray = shipyardItem.BlocksToProcess[tool.EntityId];
-
-                //find the next target for each grinder, if it needs one
-                for (int i = 0; i < shipyardItem.Settings.BeamCount; i++)
-                {
-                    var toRemove = new HashSet<BlockTarget>();
-                    if (blockArray[i] != null)
-                        continue;
-
-                    BlockTarget nextTarget = null;
-
-                    for (int b = 0; b < shipyardItem.ProxDict[tool.EntityId].Count; b++)
+                    if (tool?.GetInventory() == null || tool.Closed || tool.MarkedForClose)
                     {
-                        nextTarget = shipyardItem.ProxDict[tool.EntityId][b];
+                        //this is bad
+                        shipyardItem.Disable();
+                        return;
+                    }
 
-                        if (nextTarget.CubeGrid.Closed || nextTarget.CubeGrid.MarkedForClose)
+                    BlockTarget[] blockArray = shipyardItem.BlocksToProcess[tool.EntityId];
+
+                    //find the next target for each grinder, if it needs one
+                    for (int i = 0; i < shipyardItem.Settings.BeamCount; i++)
+                    {
+                        var toRemove = new HashSet<BlockTarget>();
+                        if (blockArray[i] != null)
                             continue;
 
-                        //one grinder per block, please
-                        bool found = false;
-                        foreach (KeyValuePair<long, BlockTarget[]> entry in shipyardItem.BlocksToProcess)
-                        {
-                            foreach (BlockTarget target in entry.Value)
-                            {
-                                if (target == null)
-                                    continue;
+                        BlockTarget nextTarget = null;
 
-                                if (target == nextTarget)
+                        for (int b = 0; b < shipyardItem.ProxDict[tool.EntityId].Count; b++)
+                        {
+                            nextTarget = shipyardItem.ProxDict[tool.EntityId][b];
+
+                            if (nextTarget?.CubeGrid == null || nextTarget.CubeGrid.Closed || nextTarget.CubeGrid.MarkedForClose)
+                                continue;
+
+                            //one grinder per block, please
+                            bool found = false;
+                            foreach (KeyValuePair<long, BlockTarget[]> entry in shipyardItem.BlocksToProcess)
+                            {
+                                if (entry.Value.Contains(nextTarget))
                                 {
                                     found = true;
                                     break;
                                 }
                             }
+
+                            if (found)
+                            {
+                                toRemove.Add(nextTarget);
+                                continue;
+                            }
+
+                            targetsToRedraw.Add(nextTarget);
+                            break;
                         }
 
-                        if (found)
+                        foreach (BlockTarget removeTarget in toRemove)
                         {
-                            toRemove.Add(nextTarget);
-                            continue;
+                            shipyardItem.ProxDict[tool.EntityId].Remove(removeTarget);
+                            shipyardItem.TargetBlocks.Remove(removeTarget);
                         }
 
-                        targetsToRedraw.Add(nextTarget);
-                        break;
-                    }
-
-                    foreach (BlockTarget removeTarget in toRemove)
-                    {
-                        shipyardItem.ProxDict[tool.EntityId].Remove(removeTarget);
-                        shipyardItem.TargetBlocks.Remove(removeTarget);
-                    }
-
-                    //we found a block to pair with our grinder, add it to the dictionary and carry on with destruction
-                    if (nextTarget != null)
-                    {
-                        shipyardItem.BlocksToProcess[tool.EntityId][i] = nextTarget;
+                        //we found a block to pair with our grinder, add it to the dictionary and carry on with destruction
+                        if (nextTarget != null)
+                        {
+                            shipyardItem.BlocksToProcess[tool.EntityId][i] = nextTarget;
+                        }
                     }
                 }
-            }
-            targetFindBlock.End();
-            shipyardItem.UpdatePowerUse();
-            var grindActionBlock = Profiler.Start(FullName, nameof(StepGrind), "Grind action");
-            var removeTargets = new List<BlockTarget>();
-            //do the grinding
-            Utilities.InvokeBlocking(() =>
-                                     {
-                                         foreach (IMyCubeBlock tool in shipyardItem.Tools)
-                                         {
-                                             for (int b = 0; b < shipyardItem.BlocksToProcess[tool.EntityId].Length; b++)
-                                             {
-                                                 BlockTarget target = shipyardItem.BlocksToProcess[tool.EntityId][b];
-                                                 if (target == null)
-                                                     continue;
+                targetFindBlock.End();
 
-                                                 if (target.CubeGrid.Closed || target.CubeGrid.MarkedForClose)
-                                                 {
-                                                     Logging.Instance.WriteDebug("Error in grind action: Target closed");
-                                                     removeTargets.Add(target);
-                                                     return;
-                                                 }
+                shipyardItem.UpdatePowerUse();
+                var grindActionBlock = Profiler.Start(FullName, nameof(StepGrind), "Grind action");
+                var removeTargets = new List<BlockTarget>();
 
-                                                 if (targetsToRedraw.Contains(target))
-                                                 {
-                                                     var toolLine = new Communication.ToolLineStruct
-                                                                    {
-                                                                        ToolId = tool.EntityId,
-                                                                        GridId = target.CubeGrid.EntityId,
-                                                                        BlockPos = target.GridPosition,
-                                                                        PackedColor = Color.OrangeRed.PackedValue,
-                                                                        Pulse = false,
-                                                                        EmitterIndex = (byte)b
-                                                                    };
-
-                                                     Communication.SendLine(toolLine, shipyardItem.ShipyardBox.Center);
-                                                 }
-
-                                                 /*
-                                                  * Grinding laser "efficiency" is a float between 0-1 where:
-                                                  *   0.0 =>   0% of components recovered
-                                                  *   1.0 => 100% of components recovered
-                                                  * 
-                                                  * Efficiency decays exponentially as distance to the target (length of the "laser") increases
-                                                  *     0m => 1.0000
-                                                  *    10m => 0.9995
-                                                  *    25m => 0.9969
-                                                  *    50m => 0.9875
-                                                  *   100m => 0.9500
-                                                  *   150m => 0.8875
-                                                  *   250m => 0.6875
-                                                  *   400m => 0.2000
-                                                  *    inf => 0.1000
-                                                  * We impose a minimum efficiency of 0.1 (10%), which happens at distances > ~450m
-                                                  */
-
-                                                 // edited, same thing as welders
-                                                 double efficiency = 1;
-                                                 //double efficiency = 1 - (target.ToolDist[tool.EntityId] / 200000);
-                                                 //if (!shipyardItem.StaticYard)
-                                                 //    efficiency /= 2;
-                                                 if (efficiency < 0.1)
-                                                     efficiency = 0.1;
-                                                 //Logging.Instance.WriteDebug(String.Format("Grinder[{0}]block[{1}] distance=[{2:F2}m] efficiency=[{3:F5}]", tool.DisplayNameText, b, Math.Sqrt(target.ToolDist[tool.EntityId]), efficiency));
-
-                                                 if (!shipyardItem.YardGrids.Contains(target.CubeGrid))
-                                                 {
-                                                     //we missed this grid or its split at some point, so add it to the list and register the split event
-                                                     shipyardItem.YardGrids.Add(target.CubeGrid);
-                                                     ((MyCubeGrid)target.CubeGrid).OnGridSplit += shipyardItem.OnGridSplit;
-                                                 }
-                                                 MyInventory grinderInventory = ((MyEntity)tool).GetInventory();
-
-                                                 if (!target.Block.IsFullyDismounted)
-                                                 {
-                                                     var decreaseBlock = Profiler.Start(FullName, nameof(StepGrind), "DecreaseMountLevel");
-                                                     target.Block.DecreaseMountLevel(grindAmount, grinderInventory);
-                                                     decreaseBlock.End();
-
-                                                     var inventoryBlock = Profiler.Start(FullName, nameof(StepGrind), "Grind Inventory");
-                                                     // First move everything into _tmpInventory
-                                                     target.Block.MoveItemsFromConstructionStockpile(_tmpInventory);
-
-                                                     // Then move items into grinder inventory, factoring in our efficiency ratio
-                                                     foreach (MyPhysicalInventoryItem item in _tmpInventory.GetItems())
-                                                     {
-                                                         //Logging.Instance.WriteDebug(String.Format("Grinder[{0}]block[{1}] Item[{2}] grind_amt[{3:F2}] collect_amt[{4:F2}]", tool.DisplayNameText, b, item.Content.SubtypeName, item.Amount, (double)item.Amount*efficiency));
-                                                         grinderInventory.Add(item, (MyFixedPoint)Math.Round((double)item.Amount * efficiency));
-                                                     }
-
-                                                     // Then clear out everything left in _tmpInventory
-                                                     _tmpInventory.Clear();
-                                                     inventoryBlock.End();
-                                                 }
-
-                                                 // This isn't an <else> clause because target.Block may have become FullyDismounted above,
-                                                 // in which case we need to run both code blocks
-                                                 if (target.Block.IsFullyDismounted)
-                                                 {
-                                                     var dismountBlock = Profiler.Start(FullName, nameof(StepGrind), "FullyDismounted");
-                                                     var tmpItemList = new List<MyPhysicalInventoryItem>();
-                                                     var blockEntity = target.Block.FatBlock as MyEntity;
-                                                     if (blockEntity != null && blockEntity.HasInventory)
-                                                     {
-                                                         var dismountInventory = Profiler.Start(FullName, nameof(StepGrind), "DismountInventory");
-                                                         for (int i = 0; i < blockEntity.InventoryCount; ++i)
-                                                         {
-                                                             MyInventory blockInventory = blockEntity.GetInventory(i);
-                                                             if (blockInventory == null)
-                                                                 continue;
-
-                                                             if (blockInventory.Empty())
-                                                                 continue;
-
-                                                             tmpItemList.Clear();
-                                                             tmpItemList.AddRange(blockInventory.GetItems());
-
-                                                             foreach (MyPhysicalInventoryItem item in tmpItemList)
-                                                             {
-                                                                 //Logging.Instance.WriteDebug(String.Format("Grinder[{0}]block[{1}] Item[{2}] inventory[{3:F2}] collected[{4:F2}]", tool.DisplayNameText, b, item.Content.SubtypeName, item.Amount, (double)item.Amount * efficiency));
-                                                                 blockInventory.Remove(item, item.Amount);
-                                                                 grinderInventory.Add(item, (MyFixedPoint)Math.Round((double)item.Amount * efficiency));
-                                                             }
-                                                         }
-                                                         dismountInventory.End();
-                                                     }
-                                                     target.Block.SpawnConstructionStockpile();
-                                                     target.CubeGrid.RazeBlock(target.GridPosition);
-                                                     removeTargets.Add(target);
-                                                     shipyardItem.TargetBlocks.Remove(target);
-                                                     dismountBlock.End();
-                                                 }
-                                             }
-                                         }
-                                     });
-
-            foreach (KeyValuePair<long, List<BlockTarget>> entry in shipyardItem.ProxDict)
-            {
-                foreach (BlockTarget removeBlock in removeTargets)
-                    entry.Value.Remove(removeBlock);
-            }
-
-            foreach (BlockTarget removeBlock in removeTargets)
-                shipyardItem.TargetBlocks.Remove(removeBlock);
-
-            //shipyardItem.ActiveTargets = 0;
-            //clear lines for any destroyed blocks and update our target count
-            foreach (KeyValuePair<long, BlockTarget[]> entry in shipyardItem.BlocksToProcess)
-            {
-                for (int i = 0; i < entry.Value.Length; i++)
+                //do the grinding
+                Utilities.InvokeBlocking(() =>
                 {
-                    BlockTarget removeBlock = entry.Value[i];
-
-                    if (removeTargets.Contains(removeBlock))
+                    try
                     {
-                        Communication.ClearLine(entry.Key, i);
-                        entry.Value[i] = null;
+                        foreach (IMyCubeBlock tool in shipyardItem.Tools)
+                        {
+                            for (int b = 0; b < shipyardItem.BlocksToProcess[tool.EntityId].Length; b++)
+                            {
+                                BlockTarget target = shipyardItem.BlocksToProcess[tool.EntityId][b];
+                                if (target?.Block == null)
+                                    continue;
+
+                                if (target.CubeGrid.Closed || target.CubeGrid.MarkedForClose)
+                                {
+                                    Logging.Instance.WriteDebug("Error in grind action: Target closed");
+                                    removeTargets.Add(target);
+                                    continue;
+                                }
+
+                                if (targetsToRedraw.Contains(target))
+                                {
+                                    var toolLine = new Communication.ToolLineStruct
+                                    {
+                                        ToolId = tool.EntityId,
+                                        GridId = target.CubeGrid.EntityId,
+                                        BlockPos = target.GridPosition,
+                                        PackedColor = Color.OrangeRed.PackedValue,
+                                        Pulse = false,
+                                        EmitterIndex = (byte)b
+                                    };
+
+                                    Communication.SendLine(toolLine, shipyardItem.ShipyardBox.Center);
+                                }
+
+                                /*
+                                 * Grinding laser "efficiency" is a float between 0-1 where:
+                                 *   0.0 =>   0% of components recovered
+                                 *   1.0 => 100% of components recovered
+                                 * 
+                                 * Efficiency decays exponentially as distance to the target (length of the "laser") increases
+                                 *     0m => 1.0000
+                                 *    10m => 0.9995
+                                 *    25m => 0.9969
+                                 *    50m => 0.9875
+                                 *   100m => 0.9500
+                                 *   150m => 0.8875
+                                 *   250m => 0.6875
+                                 *   400m => 0.2000
+                                 *    inf => 0.1000
+                                 * We impose a minimum efficiency of 0.1 (10%), which happens at distances > ~450m
+                                 */
+
+                                // edited, same thing as welders
+                                double efficiency = 1;
+                                if (efficiency < 0.1)
+                                    efficiency = 0.1;
+
+                                if (!shipyardItem.YardGrids.Contains(target.CubeGrid))
+                                {
+                                    //we missed this grid or its split at some point, so add it to the list and register the split event
+                                    shipyardItem.YardGrids.Add(target.CubeGrid);
+                                    ((MyCubeGrid)target.CubeGrid).OnGridSplit += shipyardItem.OnGridSplit;
+                                }
+
+                                MyInventory grinderInventory = ((MyEntity)tool).GetInventory();
+                                if (grinderInventory == null)
+                                    continue;
+
+                                if (!target.Block.IsFullyDismounted)
+                                {
+                                    var decreaseBlock = Profiler.Start(FullName, nameof(StepGrind), "DecreaseMountLevel");
+
+                                    // Add safety check before grinding
+                                    if (target.Block.Integrity > 0 && target.Block.BuildPercent() > 0)
+                                    {
+                                        try
+                                        {
+                                            target.Block.DecreaseMountLevel(grindAmount, grinderInventory);
+                                        }
+                                        catch
+                                        {
+                                            continue;
+                                        }
+                                    }
+
+                                    decreaseBlock.End();
+
+                                    var inventoryBlock = Profiler.Start(FullName, nameof(StepGrind), "Grind Inventory");
+                                    // First move everything into _tmpInventory
+                                    target.Block.MoveItemsFromConstructionStockpile(_tmpInventory);
+
+                                    // Then move items into grinder inventory, factoring in our efficiency ratio
+                                    foreach (MyPhysicalInventoryItem item in _tmpInventory.GetItems())
+                                    {
+                                        grinderInventory.Add(item, (MyFixedPoint)Math.Round((double)item.Amount * efficiency));
+                                    }
+
+                                    // Then clear out everything left in _tmpInventory
+                                    _tmpInventory.Clear();
+                                    inventoryBlock.End();
+                                }
+
+                                // This isn't an <else> clause because target.Block may have become FullyDismounted above,
+                                // in which case we need to run both code blocks
+                                if (target.Block.IsFullyDismounted)
+                                {
+                                    var dismountBlock = Profiler.Start(FullName, nameof(StepGrind), "FullyDismounted");
+                                    var tmpItemList = new List<MyPhysicalInventoryItem>();
+                                    var blockEntity = target.Block.FatBlock as MyEntity;
+                                    if (blockEntity != null && blockEntity.HasInventory)
+                                    {
+                                        var dismountInventory = Profiler.Start(FullName, nameof(StepGrind), "DismountInventory");
+                                        for (int i = 0; i < blockEntity.InventoryCount; ++i)
+                                        {
+                                            MyInventory blockInventory = blockEntity.GetInventory(i);
+                                            if (blockInventory == null || blockInventory.Empty())
+                                                continue;
+
+                                            tmpItemList.Clear();
+                                            tmpItemList.AddRange(blockInventory.GetItems());
+
+                                            foreach (MyPhysicalInventoryItem item in tmpItemList)
+                                            {
+                                                blockInventory.Remove(item, item.Amount);
+                                                grinderInventory.Add(item, (MyFixedPoint)Math.Round((double)item.Amount * efficiency));
+                                            }
+                                        }
+                                        dismountInventory.End();
+                                    }
+                                    target.Block.SpawnConstructionStockpile();
+                                    target.CubeGrid.RazeBlock(target.GridPosition);
+                                    removeTargets.Add(target);
+                                    shipyardItem.TargetBlocks.Remove(target);
+                                    dismountBlock.End();
+                                }
+                            }
+                        }
                     }
+                    catch (Exception ex)
+                    {
+                        Logging.Instance.WriteDebug($"[StepGrind] Error in grind process: {ex.Message}");
+                    }
+                });
 
-                    //if (!removeTargets.Contains(removeBlock) && removeBlock != null)
-                    //{
-                    //    shipyardItem.ActiveTargets++;
-                    //}
+                foreach (KeyValuePair<long, List<BlockTarget>> entry in shipyardItem.ProxDict)
+                {
+                    foreach (BlockTarget removeBlock in removeTargets)
+                        entry.Value.Remove(removeBlock);
                 }
-            }
 
-            grindActionBlock.End();
+                foreach (BlockTarget removeBlock in removeTargets)
+                    shipyardItem.TargetBlocks.Remove(removeBlock);
+
+                //clear lines for any destroyed blocks and update our target count
+                foreach (KeyValuePair<long, BlockTarget[]> entry in shipyardItem.BlocksToProcess)
+                {
+                    for (int i = 0; i < entry.Value.Length; i++)
+                    {
+                        BlockTarget removeBlock = entry.Value[i];
+                        if (removeTargets.Contains(removeBlock))
+                        {
+                            Communication.ClearLine(entry.Key, i);
+                            entry.Value[i] = null;
+                        }
+                    }
+                }
+
+                grindActionBlock.End();
+            }
+            catch (Exception ex)
+            {
+                Logging.Instance.WriteLine($"[StepGrind] Unhandled error: {ex}");
+            }
         }
 
         private bool StepWeld(ShipyardItem shipyardItem)
         {
-            Logging.Instance.WriteLine($"[StepWeld] Starting weld cycle for yard {shipyardItem.EntityId}");
+            Logging.Instance.WriteDebug($"[StepWeld] Starting weld cycle for yard {shipyardItem.EntityId}");
+            Logging.Instance.WriteDebug($"[StepWeld] Current grid count: {shipyardItem.YardGrids.Count}");
+            Logging.Instance.WriteDebug($"[StepWeld] Current target count: {shipyardItem.TargetBlocks.Count}");
+
+            // Log grid details
+            foreach (var grid in shipyardItem.YardGrids)
+            {
+                Logging.Instance.WriteDebug($"[StepWeld] Grid {grid.EntityId} status:");
+                Logging.Instance.WriteDebug($"  - Has physics: {grid.Physics != null}");
+                Logging.Instance.WriteDebug($"  - Closed: {grid.Closed}");
+                Logging.Instance.WriteDebug($"  - MarkedForClose: {grid.MarkedForClose}");
+                Logging.Instance.WriteDebug($"  - Is projection: {grid.Projector() != null}");
+            }
+
             var targetsToRemove = new HashSet<BlockTarget>();
             var targetsToRedraw = new HashSet<BlockTarget>();
 
-            //we need to multiply this by MyShipWelder.WELDER_AMOUNT_PER_SECOND / 2, which also evaluates to 1
             float weldAmount = MyAPIGateway.Session.WelderSpeedMultiplier * shipyardItem.Settings.WeldMultiplier;
             float boneAmount = weldAmount * .1f;
 
@@ -479,77 +511,88 @@ namespace ShipyardMod.ProcessHandlers
 
             if (shipyardItem.TargetBlocks.Count == 0)
             {
-                Logging.Instance.WriteLine("[StepWeld] No target blocks, starting scan");
+                Logging.Instance.WriteDebug("[StepWeld] No target blocks, starting scan");
                 var sortBlock = Profiler.Start(FullName, nameof(StepWeld), "Sort Targets");
                 shipyardItem.TargetBlocks.Clear();
                 shipyardItem.ProxDict.Clear();
-                //precalculate all the BlockTarget for our target grids to speed things up
+
                 var gridTargets = new Dictionary<long, List<BlockTarget>>();
+
                 foreach (IMyCubeGrid targetGrid in shipyardItem.YardGrids)
                 {
                     if (targetGrid.Closed || targetGrid.MarkedForClose)
+                    {
+                        Logging.Instance.WriteDebug($"[StepWeld] Skipping closed/marked grid {targetGrid.EntityId}");
                         continue;
+                    }
 
                     var tmpBlocks = new List<IMySlimBlock>();
                     targetGrid.GetBlocks(tmpBlocks);
+                    Logging.Instance.WriteDebug($"[StepWeld] Found {tmpBlocks.Count} total blocks in grid {targetGrid.EntityId}");
 
                     gridTargets.Add(targetGrid.EntityId, new List<BlockTarget>(tmpBlocks.Count));
+                    int skippedBlocks = 0;
+                    int addedBlocks = 0;
+
                     foreach (IMySlimBlock block in tmpBlocks.ToArray())
                     {
-                        if (block == null || (targetGrid.Physics != null && block.IsFullIntegrity && !block.HasDeformation))
+                        if (block == null)
+                        {
+                            skippedBlocks++;
                             continue;
+                        }
+
+                        if (targetGrid.Physics != null && block.IsFullIntegrity && !block.HasDeformation)
+                        {
+                            skippedBlocks++;
+                            continue;
+                        }
 
                         var target = new BlockTarget(block, shipyardItem);
-
                         shipyardItem.TargetBlocks.Add(target);
-
                         gridTargets[targetGrid.EntityId].Add(target);
+                        addedBlocks++;
                     }
-                    /*
-                    var proj = targetGrid.Projector();
-                    if (proj != null && !shipyardItem.YardGrids.Contains(proj.CubeGrid))
-                    {
-                        proj.CubeGrid.GetBlocks(tmpBlocks);
-                        gridTargets.Add(proj.CubeGrid.EntityId,new List<BlockTarget>());
-                        foreach (var block in tmpBlocks.ToArray())
-                        {
-                            if (block == null || (targetGrid.Physics != null && block.IsFullIntegrity && !block.HasDeformation))
-                                continue;
 
-                            var pos = block.GetPosition();
-                            if (!shipyardItem.ShipyardBox.Contains(ref pos))
-                                continue;
-
-                            var target = new BlockTarget(block, shipyardItem);
-
-                            shipyardItem.TargetBlocks.Add(target);
-                            gridTargets[block.CubeGrid.EntityId].Add(target);
-                        }
-                    }
-                    */
-                    Logging.Instance.WriteLine($"[StepWeld] Found {shipyardItem.TargetBlocks.Count} blocks to weld");
+                    Logging.Instance.WriteDebug($"[StepWeld] Grid {targetGrid.EntityId} processing results:");
+                    Logging.Instance.WriteDebug($"  - Skipped blocks: {skippedBlocks}");
+                    Logging.Instance.WriteDebug($"  - Added targets: {addedBlocks}");
                 }
-                int count = 0;
+
+                // Log total processing results
+                int totalTargets = 0;
                 foreach (KeyValuePair<long, List<BlockTarget>> entry in gridTargets)
-                    count += entry.Value.Count;
-                
+                {
+                    totalTargets += entry.Value.Count;
+                    Logging.Instance.WriteDebug($"[StepWeld] Grid {entry.Key} final target count: {entry.Value.Count}");
+                }
+
+                // Sort and assign targets to tools
                 foreach (IMyCubeBlock tool in shipyardItem.Tools)
                 {
+                    Logging.Instance.WriteDebug($"[StepWeld] Setting up tool {tool.EntityId}");
                     shipyardItem.ProxDict.Add(tool.EntityId, new List<BlockTarget>());
-                    //first sort grids by distance to tool
+
                     shipyardItem.YardGrids.Sort((a, b) =>
-                                                    Vector3D.DistanceSquared(a.Center(), tool.GetPosition()).CompareTo(
-                                                        Vector3D.DistanceSquared(b.Center(), tool.GetPosition())));
+                        Vector3D.DistanceSquared(a.Center(), tool.GetPosition()).CompareTo(
+                            Vector3D.DistanceSquared(b.Center(), tool.GetPosition())));
 
                     foreach (IMyCubeGrid grid in shipyardItem.YardGrids)
                     {
-                        //then sort blocks by distance to grid center
+                        if (!gridTargets.ContainsKey(grid.EntityId))
+                        {
+                            Logging.Instance.WriteDebug($"[StepWeld] Warning: Grid {grid.EntityId} missing from gridTargets");
+                            continue;
+                        }
+
                         List<BlockTarget> list = gridTargets[grid.EntityId];
                         list.Sort((a, b) => a.CenterDist.CompareTo(b.CenterDist));
-
                         shipyardItem.ProxDict[tool.EntityId].AddRange(list);
                     }
+
+                    Logging.Instance.WriteDebug($"[StepWeld] Tool {tool.EntityId} assigned {shipyardItem.ProxDict[tool.EntityId].Count} targets");
                 }
+
                 sortBlock.End();
             }
 
@@ -564,11 +607,15 @@ namespace ShipyardMod.ProcessHandlers
             //assign blocks to our welders
             foreach (IMyCubeBlock welder in shipyardItem.Tools)
             {
-                Logging.Instance.WriteLine($"[StepWeld] Processing welder {welder.EntityId}");
+                Logging.Instance.WriteDebug($"[StepWeld] Processing welder {welder.EntityId}");
+
                 for (int i = 0; i < shipyardItem.Settings.BeamCount; i++)
                 {
                     if (shipyardItem.BlocksToProcess[welder.EntityId][i] != null)
+                    {
+                        Logging.Instance.WriteDebug($"[StepWeld] Beam {i} already has assigned target, skipping");
                         continue;
+                    }
 
                     var toRemove = new List<BlockTarget>();
                     BlockTarget nextTarget = null;
@@ -576,7 +623,6 @@ namespace ShipyardMod.ProcessHandlers
                     foreach (BlockTarget target in shipyardItem.ProxDict[welder.EntityId])
                     {
                         bool found = false;
-                        //one block per tool
                         foreach (KeyValuePair<long, BlockTarget[]> entry in shipyardItem.BlocksToProcess)
                         {
                             if (entry.Value.Contains(target))
@@ -585,15 +631,19 @@ namespace ShipyardMod.ProcessHandlers
                                 break;
                             }
                         }
+
                         if (found)
                         {
                             toRemove.Add(target);
+                            Logging.Instance.WriteDebug($"[StepWeld] Target at {target.GridPosition} already being processed");
                             continue;
                         }
 
                         if (target.Projector != null)
                         {
                             BuildCheckResult res = target.Projector.CanBuild(target.Block, false);
+                            Logging.Instance.WriteDebug($"[StepWeld] Projection build check for {target.GridPosition}: {res}");
+
                             if (res == BuildCheckResult.AlreadyBuilt)
                             {
                                 target.UpdateAfterBuild();
@@ -608,20 +658,22 @@ namespace ShipyardMod.ProcessHandlers
                                 Utilities.InvokeBlocking(() => success = BuildTarget(target, shipyardItem, welder));
                                 if (!success)
                                 {
-                                    //toRemove.Add(target);
+                                    Logging.Instance.WriteDebug($"[StepWeld] Failed to build projection at {target.GridPosition}");
                                     continue;
                                 }
                                 target.UpdateAfterBuild();
                             }
                         }
+
                         if (target.Block.IsFullIntegrity && !target.Block.HasDeformation)
                         {
-                            Logging.Instance.WriteLine($"[StepWeld] Block at {target.GridPosition} is already complete");
+                            Logging.Instance.WriteDebug($"[StepWeld] Block at {target.GridPosition} is already complete");
                             toRemove.Add(target);
                             continue;
                         }
-                        Logging.Instance.WriteDebug("[StepWeld] Welding loop completed.");
+
                         nextTarget = target;
+                        Logging.Instance.WriteDebug($"[StepWeld] Selected target at {target.GridPosition} for beam {i}");
                         break;
                     }
 
@@ -630,7 +682,7 @@ namespace ShipyardMod.ProcessHandlers
                         targetsToRedraw.Add(nextTarget);
                         shipyardItem.BlocksToProcess[welder.EntityId][i] = nextTarget;
                     }
-                    
+
                     foreach (BlockTarget removeTarget in toRemove)
                     {
                         shipyardItem.ProxDict[welder.EntityId].Remove(removeTarget);
@@ -638,7 +690,6 @@ namespace ShipyardMod.ProcessHandlers
                     }
                 }
             }
-            
             //update lasers
             foreach (KeyValuePair<long, BlockTarget[]> entry in shipyardItem.BlocksToProcess)
             {

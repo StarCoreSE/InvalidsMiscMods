@@ -1,5 +1,6 @@
 ﻿using System;
 using Sandbox.ModAPI;
+using ShipyardMod.Utility;
 
 namespace ShipyardMod.ProcessHandlers
 {
@@ -38,9 +39,15 @@ namespace ShipyardMod.ProcessHandlers
             if (DateTime.Now - LastUpdate > TimeSpan.FromMilliseconds(GetUpdateResolution()))
             {
                 if (ServerOnly() && MyAPIGateway.Multiplayer.IsServer)
+                {
+                    Logging.Instance.WriteDebug($"[ProcessHandler] {GetType().Name} can run on server");
                     return true;
+                }
                 if (ClientOnly() && MyAPIGateway.Session.Player != null)
+                {
+                    Logging.Instance.WriteDebug($"[ProcessHandler] {GetType().Name} can run on client");
                     return true;
+                }
             }
             return false;
         }

@@ -40,12 +40,12 @@ namespace ShipyardMod.ProcessHandlers
             {
                 if (ServerOnly() && MyAPIGateway.Multiplayer.IsServer)
                 {
-                    Logging.Instance.WriteDebug($"[ProcessHandler] {GetType().Name} can run on server");
+                    //Logging.Instance.WriteDebug($"[ProcessHandler] {GetType().Name} can run on server");
                     return true;
                 }
                 if (ClientOnly() && MyAPIGateway.Session.Player != null)
                 {
-                    Logging.Instance.WriteDebug($"[ProcessHandler] {GetType().Name} can run on client");
+                    //Logging.Instance.WriteDebug($"[ProcessHandler] {GetType().Name} can run on client");
                     return true;
                 }
             }

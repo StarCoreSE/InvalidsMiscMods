@@ -347,14 +347,11 @@ namespace ShipyardMod
                 sb.AppendLine();
                 sb.AppendLine($"Shipyard Status: {yard.YardType}");
 
-                // Add status reason notifications
+                // Use the DisableReason from ShipyardItem
                 switch (yard.YardType)
                 {
                     case ShipyardType.Disabled:
-                        if (yard.ContainsGrids.Count == 0)
-                            _lastStatus = "Status Reason: No grids detected in shipyard";
-                        else
-                            _lastStatus = "Status Reason: Shipyard is idle";
+                        _lastStatus = $"Status Reason: {yard.DisableReason}";
                         sb.AppendLine(_lastStatus);
                         break;
 
@@ -366,8 +363,7 @@ namespace ShipyardMod
                     case ShipyardType.Weld:
                         if (yard.MissingComponentsDict.Any())
                         {
-                            _lastStatus = "Status Reason: Missing components - Welding paused";
-                            sb.AppendLine(_lastStatus);
+                            sb.AppendLine("Status Reason: Missing components - Welding paused");
                             sb.AppendLine("Missing Components:");
                             foreach (var component in yard.MissingComponentsDict)
                             {
@@ -376,16 +372,14 @@ namespace ShipyardMod
                         }
                         else if (!yard.Tools.Any(x => ((IMyFunctionalBlock)x).Enabled))
                         {
-                            _lastStatus = "Status Reason: One or more corner blocks are disabled";
-                            sb.AppendLine(_lastStatus);
+                            sb.AppendLine("Status Reason: One or more corner blocks are disabled");
                         }
                         break;
 
                     case ShipyardType.Grind:
                         if (!yard.Tools.Any(x => ((IMyFunctionalBlock)x).Enabled))
                         {
-                            _lastStatus = "Status Reason: One or more corner blocks are disabled";
-                            sb.AppendLine(_lastStatus);
+                            sb.AppendLine("Status Reason: One or more corner blocks are disabled");
                         }
                         break;
                 }

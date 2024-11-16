@@ -322,42 +322,76 @@ namespace ShipyardMod
             MyAPIGateway.TerminalControls.AddAction<IMyCollector>(stopAction);
         }
 
+        private string _lastStatus = "";  // Add this as a class field
+
         private void AppendingCustomInfo(IMyTerminalBlock b, StringBuilder arg2)
         {
             try
             {
                 var sb = new StringBuilder();
                 ShipyardItem yard = GetYard(b);
+
                 if (yard == null)
                 {
-                    sb.AppendLine("Not part of a valid shipyard");
+                    _lastStatus = "Not part of a valid shipyard";
+                    sb.AppendLine(_lastStatus);
                     arg2.Append(sb);
                     return;
                 }
 
-                // Power info
                 sb.Append("Required Input: ");
                 MyValueFormatter.AppendWorkInBestUnit(_power, sb);
                 sb.AppendLine();
                 sb.Append("Max required input: ");
                 MyValueFormatter.AppendWorkInBestUnit(_maxpower, sb);
                 sb.AppendLine();
-
-                // Shipyard status
                 sb.AppendLine($"Shipyard Status: {yard.YardType}");
 
-                if (yard.YardType == ShipyardType.Weld && yard.MissingComponentsDict.Any())
+                // Add status reason notifications
+                switch (yard.YardType)
                 {
-                    sb.AppendLine("Welding paused - Missing components:");
-                    foreach (var component in yard.MissingComponentsDict)
-                    {
-                        sb.AppendLine($"  {component.Key}: {component.Value}");
-                    }
+                    case ShipyardType.Disabled:
+                        if (yard.ContainsGrids.Count == 0)
+                            _lastStatus = "Status Reason: No grids detected in shipyard";
+                        else
+                            _lastStatus = "Status Reason: Shipyard is idle";
+                        sb.AppendLine(_lastStatus);
+                        break;
+
+                    case ShipyardType.Invalid:
+                        _lastStatus = "Status Reason: Shipyard configuration is invalid";
+                        sb.AppendLine(_lastStatus);
+                        break;
+
+                    case ShipyardType.Weld:
+                        if (yard.MissingComponentsDict.Any())
+                        {
+                            _lastStatus = "Status Reason: Missing components - Welding paused";
+                            sb.AppendLine(_lastStatus);
+                            sb.AppendLine("Missing Components:");
+                            foreach (var component in yard.MissingComponentsDict)
+                            {
+                                sb.AppendLine($"  {component.Key}: {component.Value}");
+                            }
+                        }
+                        else if (!yard.Tools.Any(x => ((IMyFunctionalBlock)x).Enabled))
+                        {
+                            _lastStatus = "Status Reason: One or more corner blocks are disabled";
+                            sb.AppendLine(_lastStatus);
+                        }
+                        break;
+
+                    case ShipyardType.Grind:
+                        if (!yard.Tools.Any(x => ((IMyFunctionalBlock)x).Enabled))
+                        {
+                            _lastStatus = "Status Reason: One or more corner blocks are disabled";
+                            sb.AppendLine(_lastStatus);
+                        }
+                        break;
                 }
 
                 sb.AppendLine($"Blocks remaining: {yard.TargetBlocks.Count}");
 
-                // Additional debug info
                 if (ShipyardCore.Debug)
                 {
                     sb.AppendLine($"Connected cargo containers: {yard.ConnectedCargo.Count}");
@@ -532,7 +566,17 @@ namespace ShipyardMod
 
         public override void UpdateBeforeSimulation10()
         {
-            ((IMyTerminalBlock)Container.Entity).RefreshCustomInfo();
+            try
+            {
+                if (_block != null && !string.IsNullOrEmpty(_lastStatus))
+                {
+                    ((IMyTerminalBlock)Container.Entity).RefreshCustomInfo();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logging.Instance.WriteLine($"Error in UpdateBeforeSimulation10: {ex.Message}");
+            }
         }
 
         public override MyObjectBuilder_EntityBase GetObjectBuilder(bool copy = false)

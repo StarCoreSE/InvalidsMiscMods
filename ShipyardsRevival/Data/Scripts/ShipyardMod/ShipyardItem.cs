@@ -92,11 +92,9 @@ namespace ShipyardMod.ItemClasses
                     Logging.Instance.WriteLine($"[ShipyardItem.Init] Starting initialization for yard {EntityId} to type {yardType}");
                     Logging.Instance.WriteDebug($"YardItem.Init: {yardType}");
 
-                    // Clear existing state first
                     TargetBlocks.Clear();
                     ProxDict.Clear();
 
-                    // Clear any active processing
                     foreach (var entry in BlocksToProcess)
                     {
                         for (int i = 0; i < entry.Value.Length; i++)
@@ -109,7 +107,6 @@ namespace ShipyardMod.ItemClasses
                         }
                     }
 
-                    // Clear old grids
                     foreach (var grid in YardGrids)
                     {
                         if (grid != null)
@@ -117,12 +114,10 @@ namespace ShipyardMod.ItemClasses
                             ((MyCubeGrid)grid).OnGridSplit -= OnGridSplit;
                         }
                     }
-                    YardGrids.Clear();
 
-                    // Set new state
+                    YardGrids.Clear();
                     YardType = yardType;
 
-                    // Register new grids
                     foreach (IMyCubeGrid grid in ContainsGrids.Where(g => g != null && !g.MarkedForClose))
                     {
                         ((MyCubeGrid)grid).OnGridSplit += OnGridSplit;
@@ -132,7 +127,6 @@ namespace ShipyardMod.ItemClasses
                     ContainsGrids.Clear();
                     IntersectsGrids.Clear();
 
-                    // Enable tools
                     Utilities.Invoke(() =>
                     {
                         foreach (IMyCubeBlock tool in Tools)
@@ -149,7 +143,6 @@ namespace ShipyardMod.ItemClasses
                     });
 
                     Logging.Instance.WriteDebug($"[ShipyardItem.Init] Initialized with {YardGrids.Count} grids");
-
                     Communication.SendYardState(this);
                 }
                 finally
@@ -184,6 +177,29 @@ namespace ShipyardMod.ItemClasses
                 _shouldDisable.Item1 = true;
                 _shouldDisable.Item2 = broadcast;
             }
+        }
+
+        public bool CanProcessCommand(ShipyardType newType)
+        {
+            if (_isDisabling || _isOperating)
+            {
+                Logging.Instance.WriteDebug($"[ShipyardItem.CanProcessCommand] Yard {EntityId} is busy (Disabling: {_isDisabling}, Operating: {_isOperating})");
+                return false;
+            }
+
+            if (Tools.Any(t => t.Closed || t.MarkedForClose))
+            {
+                Logging.Instance.WriteDebug($"[ShipyardItem.CanProcessCommand] Yard {EntityId} has closed tools");
+                return false;
+            }
+
+            if (YardEntity.Closed || YardEntity.MarkedForClose)
+            {
+                Logging.Instance.WriteDebug($"[ShipyardItem.CanProcessCommand] Yard {EntityId} entity is closed");
+                return false;
+            }
+
+            return true;
         }
 
         public void ProcessDisable()

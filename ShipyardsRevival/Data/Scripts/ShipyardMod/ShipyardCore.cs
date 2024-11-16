@@ -109,114 +109,89 @@ namespace ShipyardMod
             Communication.SendMessageToServer(Communication.MessageTypeEnum.ClientChat, message);
         }
 
-        private Dictionary<long, BoxItem> _cachedBoxes = new Dictionary<long, BoxItem>();
-
         private void CalculateBoxesContaining()
         {
-            var newBoxes = new Dictionary<long, BoxItem>();
-
             foreach (ShipyardItem item in ProcessLocalYards.LocalYards)
             {
                 foreach (IMyCubeGrid grid in item.ContainsGrids)
                 {
-                    if (item.YardType != ShipyardType.Disabled || grid.Closed ||
-                        !ShipyardSettings.Instance.GetYardSettings(item.EntityId).GuideEnabled)
+                    if (item.YardType != ShipyardType.Disabled || grid.Closed || !ShipyardSettings.Instance.GetYardSettings(item.EntityId).GuideEnabled)
                     {
+                        BoxDict.Remove(grid.EntityId);
                         continue;
                     }
-
-                    BoxItem cachedBox;
-                    if (_cachedBoxes.TryGetValue(grid.EntityId, out cachedBox))
-                    {
-                        // Only recalculate if grid has moved
-                        if (cachedBox.LastPos == grid.GetPosition())
-                        {
-                            newBoxes[grid.EntityId] = cachedBox;
-                            continue;
-                        }
-                    }
+                    //if (BoxDict.ContainsKey(grid.EntityId) && Vector3D.DistanceSquared(BoxDict[grid.EntityId].LastPos, grid.GetPosition()) < 0.01)
+                    //    continue;
 
                     uint color;
+
                     if (grid.Physics != null)
                         color = Color.Green.PackedValue;
                     else
                     {
                         var proj = grid.Projector();
-                        if (proj == null || proj.RemainingBlocks == 0)
+
+                        if (proj == null) //ghost grid like Digi's helmet
                             continue;
+
+                        if (proj.RemainingBlocks == 0) //projection is complete
+                            continue;
+
                         color = Color.Cyan.PackedValue;
                     }
 
-                    newBoxes[grid.EntityId] = new BoxItem
-                    {
-                        Lines = MathUtility.CalculateObbLines(MathUtility.CreateOrientedBoundingBox(grid)),
-                        GridId = grid.EntityId,
-                        PackedColor = color,
-                        LastPos = grid.GetPosition()
-                    };
+                    BoxDict[grid.EntityId] = new BoxItem
+                                             {
+                                                 Lines = MathUtility.CalculateObbLines(MathUtility.CreateOrientedBoundingBox(grid)),
+                                                 GridId = grid.EntityId,
+                                                 //PackedColor = grid.Physics == null ? Color.Cyan.PackedValue : Color.Green.PackedValue,
+                                                 PackedColor = color,
+                                                 LastPos = grid.GetPosition()
+                                             };
                 }
-            }
-
-            _cachedBoxes = newBoxes;
-            BoxDict.Clear();
-            foreach (var box in newBoxes)
-            {
-                BoxDict[box.Key] = box.Value;
             }
         }
 
-        private Dictionary<long, BoxItem> _cachedIntersectingBoxes = new Dictionary<long, BoxItem>();
-
         private void CalculateBoxesIntersecting()
         {
-            var newBoxes = new Dictionary<long, BoxItem>();
-
             foreach (var item in ProcessLocalYards.LocalYards)
             {
                 foreach (IMyCubeGrid grid in item.IntersectsGrids)
                 {
-                    if (item.YardType != ShipyardType.Disabled || grid.Closed ||
-                        !ShipyardSettings.Instance.GetYardSettings(item.EntityId).GuideEnabled)
+                    if (item.YardType != ShipyardType.Disabled || grid.Closed || !ShipyardSettings.Instance.GetYardSettings(item.EntityId).GuideEnabled)
                     {
+                        BoxDict.Remove(grid.EntityId);
                         continue;
                     }
-
-                    BoxItem cachedBox;
-                    if (_cachedIntersectingBoxes.TryGetValue(grid.EntityId, out cachedBox))
-                    {
-                        // Only recalculate if grid has moved
-                        if (cachedBox.LastPos == grid.GetPosition())
-                        {
-                            newBoxes[grid.EntityId] = cachedBox;
-                            continue;
-                        }
-                    }
+                    //if (BoxDict.ContainsKey(grid.EntityId) && Vector3D.DistanceSquared(BoxDict[grid.EntityId].LastPos, grid.GetPosition()) < 0.01)
+                    //    continue;
 
                     uint color;
+
                     if (grid.Physics != null)
                         color = Color.Yellow.PackedValue;
                     else
                     {
                         var proj = grid.Projector();
-                        if (proj == null || proj.RemainingBlocks == 0)
+
+                        if (proj == null) //ghost grid like Digi's helmet
                             continue;
+
+                        if (proj.RemainingBlocks == 0) //projection is complete
+                            continue;
+
                         color = Color.CornflowerBlue.PackedValue;
                     }
 
-                    newBoxes[grid.EntityId] = new BoxItem
-                    {
-                        Lines = MathUtility.CalculateObbLines(MathUtility.CreateOrientedBoundingBox(grid)),
-                        GridId = grid.EntityId,
-                        PackedColor = color,
-                        LastPos = grid.GetPosition()
-                    };
+                    BoxDict[grid.EntityId] = new BoxItem
+                                             {
+                                                 Lines = MathUtility.CalculateObbLines(MathUtility.CreateOrientedBoundingBox(grid)),
+                                                 GridId = grid.EntityId,
+                                                 //PackedColor = grid.Physics == null ? Color.CornflowerBlue.PackedValue : Color.Yellow.PackedValue,
+                                                 PackedColor = color,
+                                                 LastPos = grid.GetPosition()
+                                             };
                 }
-            }
-
-            _cachedIntersectingBoxes = newBoxes;
-            foreach (var box in newBoxes)
-            {
-                BoxDict[box.Key] = box.Value;
             }
         }
 
@@ -253,9 +228,6 @@ namespace ShipyardMod
             Communication.UnregisterHandlers();
         }
 
-        private int _boxUpdateCounter = 0;
-        private const int BOX_UPDATE_INTERVAL = 30; // Update every 30 frames
-
         public override void Draw()
         {
             if (MyAPIGateway.Session?.Player == null || !_initialized)
@@ -263,19 +235,15 @@ namespace ShipyardMod
 
             try
             {
-                _boxUpdateCounter++;
-                if (_boxUpdateCounter >= BOX_UPDATE_INTERVAL)
-                {
-                    _boxUpdateCounter = 0;
-
-                    var t1 = MyAPIGateway.Parallel.Start(CalculateBoxesContaining);
-                    var t2 = MyAPIGateway.Parallel.Start(CalculateBoxesIntersecting);
-                    var t3 = MyAPIGateway.Parallel.Start(CalculateLines);
-                    t1.Wait();
-                    t2.Wait();
-                    t3.Wait();
-                }
-
+                //these tasks are too simple to use Parallel.ForEach or similar in the body, but
+                //can all safely be run simultaneously, so do that.
+                var t1 = MyAPIGateway.Parallel.Start(CalculateBoxesContaining);
+                var t2 = MyAPIGateway.Parallel.Start(CalculateBoxesIntersecting);
+                var t3 = MyAPIGateway.Parallel.Start(CalculateLines);
+                //wait for all three to finish
+                t1.Wait();
+                t2.Wait();
+                t3.Wait();
                 DrawLines();
                 FadeLines();
                 DrawScanning();

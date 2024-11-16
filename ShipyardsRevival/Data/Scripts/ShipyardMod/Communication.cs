@@ -712,7 +712,6 @@ namespace ShipyardMod.Utility
             long yardId = BitConverter.ToInt64(data, 0);
             var type = (ShipyardType)data.Last();
 
-            // Prevent duplicate processing
             if (!_processingYards.Add(yardId))
             {
                 Logging.Instance.WriteDebug($"[HandleYardCommand] Yard {yardId} already being processed, skipping duplicate command");
@@ -721,32 +720,27 @@ namespace ShipyardMod.Utility
 
             try
             {
-                Logging.Instance.WriteDebug($"[HandleYardCommand] Received {type} command for yard {yardId}");
-
                 foreach (ShipyardItem yard in ProcessShipyardDetection.ShipyardsList)
                 {
                     if (yard.EntityId != yardId)
                         continue;
 
-                    Logging.Instance.WriteDebug($"[HandleYardCommand] Found yard {yardId}, current type: {yard.YardType}");
+                    if (!yard.CanProcessCommand(type))
+                    {
+                        Logging.Instance.WriteDebug($"[HandleYardCommand] Yard {yardId} cannot process command at this time");
+                        return;
+                    }
 
                     if (type == ShipyardType.Disabled || type == ShipyardType.Invalid)
-                    {
-                        Logging.Instance.WriteDebug($"[HandleYardCommand] Disabling yard {yardId}");
                         yard.Disable();
-                    }
                     else
-                    {
-                        Logging.Instance.WriteDebug($"[HandleYardCommand] Initializing yard {yardId} to type {type}");
                         yard.Init(type);
-                    }
 
                     break;
                 }
             }
             finally
             {
-                // Always remove from processing set when done
                 _processingYards.Remove(yardId);
             }
         }

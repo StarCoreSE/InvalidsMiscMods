@@ -718,7 +718,17 @@ namespace ShipyardMod.ProcessHandlers
             }
 
             if (shipyardItem.BlocksToProcess.All(e => e.Value.All(t => t == null)))
+            {
+                shipyardItem.Disable(true, "No more blocks to weld");
                 return false;
+            }
+
+            if (shipyardItem.TargetBlocks.Count == 0)
+            {
+                Logging.Instance.WriteDebug($"[StepWeld] Populated {shipyardItem.TargetBlocks.Count} target blocks.");
+                shipyardItem.Disable(true, "No blocks require welding");
+                return false;
+            }
 
             shipyardItem.UpdatePowerUse();
             targetsToRedraw.Clear();
@@ -859,7 +869,7 @@ namespace ShipyardMod.ProcessHandlers
                         entry.Value[i] = null;
                         continue;
                     }
-                    
+
                     if (_stalledTargets.Contains(target))
                     {
                         var blockComponents = new Dictionary<string, int>();
@@ -872,9 +882,15 @@ namespace ShipyardMod.ProcessHandlers
                             else
                                 shipyardItem.MissingComponentsDict.Add(component.Key, component.Value);
                         }
-                        
+
+                        if (shipyardItem.MissingComponentsDict.Any())
+                        {
+                            shipyardItem.Disable(true, "Insufficient components to continue welding");
+                            return false;
+                        }
+
                         var toolLine = new Communication.ToolLineStruct
-                                       {
+                        {
                                            ToolId = entry.Key,
                                            GridId = target.CubeGrid.EntityId,
                                            BlockPos = target.GridPosition,

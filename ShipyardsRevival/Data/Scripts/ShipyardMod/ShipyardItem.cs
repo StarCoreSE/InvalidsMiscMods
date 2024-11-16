@@ -54,6 +54,7 @@ namespace ShipyardMod.ItemClasses
 
         public ShipyardType YardType;
         public bool StaticYard;
+        public string DisableReason { get; private set; } = "Shipyard is idle";
 
         public ShipyardItem(MyOrientedBoundingBoxD box, IMyCubeBlock[] tools, ShipyardType yardType, IMyEntity yardEntity)
         {
@@ -162,7 +163,7 @@ namespace ShipyardMod.ItemClasses
         private volatile bool _isDisabling;
         private volatile bool _isOperating;
 
-        public void Disable(bool broadcast = true)
+        public void Disable(bool broadcast = true, string reason = null)
         {
             lock (_stateLock)
             {
@@ -172,9 +173,14 @@ namespace ShipyardMod.ItemClasses
                     return;
                 }
 
+                // Set the disable reason
+                DisableReason = reason ?? (MissingComponentsDict.Any()
+                    ? "Insufficient components to continue welding"
+                    : "Shipyard is idle");
+
                 _isDisabling = true;
                 _isOperating = false;
-                Logging.Instance.WriteDebug($"[ShipyardItem.Disable] Starting disable for yard {EntityId}, broadcast={broadcast}");
+                Logging.Instance.WriteDebug($"[ShipyardItem.Disable] Starting disable for yard {EntityId}, broadcast={broadcast}, reason: {DisableReason}");
                 _shouldDisable.Item1 = true;
                 _shouldDisable.Item2 = broadcast;
             }

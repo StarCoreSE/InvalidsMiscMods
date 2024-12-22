@@ -60,6 +60,13 @@ public class CollisionPredictor : MySessionComponentBase
             return;
         }
 
+        // Get all entities to ignore (player's ship and character)
+        var entitiesToIgnore = new HashSet<IMyEntity>();
+        MyAPIGateway.Entities.GetEntities(entitiesToIgnore, e =>
+            e == grid ||
+            e == player.Character ||
+            (e.GetTopMostParent()?.EntityId == grid.EntityId));
+
         var velocity = grid.Physics.LinearVelocity;
         var speed = velocity.Length();
 
@@ -77,6 +84,7 @@ public class CollisionPredictor : MySessionComponentBase
 
         int raysCast = 0;
         int hitsDetected = 0;
+        string debugText = "";
 
         for (int i = 0; i < rayDirections.Count; i++)
         {
@@ -86,28 +94,41 @@ public class CollisionPredictor : MySessionComponentBase
             // Debug draw the ray
             DrawLine(position, rayEnd, rayColors[i % rayColors.Length]);
 
-            List<IHitInfo> hits = new List<IHitInfo>();
-            MyAPIGateway.Physics.CastRay(position, rayEnd, hits);
-
-            foreach (var hit in hits)
+            IHitInfo hitInfo;
+            if (MyAPIGateway.Physics.CastLongRay(position, rayEnd, out hitInfo, true))
             {
-                if (hit?.HitEntity?.GetTopMostParent()?.EntityId == grid.EntityId) continue; // Skip self
+                // Check if the hit entity is in the ignore list
+                if (entitiesToIgnore.Contains(hitInfo.HitEntity))
+                    continue;
 
-                if (hit.HitEntity == null) // Hit voxel
+                hitsDetected++;
+
+                string entityName = hitInfo.HitEntity?.DisplayName ?? "Voxel";
+                debugText += $"Hit: {entityName}\n";
+
+                Color lineColor;
+                if (hitInfo.HitEntity == null) // Voxel hit
                 {
-                    hitsDetected++;
-                    Color lineColor = IsOnCollisionCourse(position, velocity, hit.Position) ? Color.Red : Color.White;
-
-                    // Draw a thicker line to the hit point
-                    DrawThickLine(position, hit.Position, lineColor);
-                    break; // Only draw the first voxel hit per ray
+                    lineColor = IsOnCollisionCourse(position, velocity, hitInfo.Position) ? Color.Red : Color.White;
                 }
+                else // Entity hit
+                {
+                    lineColor = new Color(255, 255, 0); // Yellow color
+                }
+                DrawThickLine(position, hitInfo.Position, lineColor);
             }
         }
 
+        // Display debug information
         if (updateCounter % NotificationInterval == 0)
+        {
+            Color notificationColor = hitsDetected > 0 ? new Color(255, 255, 0) : Color.White; // Yellow if hits, White if none
             MyAPIGateway.Utilities.ShowNotification($"Debug: Rays cast: {raysCast}, Hits detected: {hitsDetected}",
-                1000, hitsDetected > 0 ? MyFontEnum.Red : MyFontEnum.White);
+                1000, notificationColor.ToString());
+
+            if (!string.IsNullOrEmpty(debugText))
+                MyAPIGateway.Utilities.ShowNotification(debugText, 2000, MyFontEnum.White);
+        }
     }
 
     private List<Vector3D> GenerateRayDirections(Vector3D mainDirection, float coneAngle, int rayCount)

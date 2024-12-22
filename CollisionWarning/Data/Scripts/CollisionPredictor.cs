@@ -12,25 +12,12 @@ using VRage.Utils;
 [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
 public class CollisionPredictor : MySessionComponentBase
 {
-    private const float MinSpeed = 20f; // 20 m/s minimum speed
-    private const float MaxRange = 1000f; // 1 km max range
-    private const float ConeAngle = 30f; // 30 degree cone angle
-    private const int RayCount = 8; // Number of rays to cast
+    private const float MinSpeed = 20f;
+    private const float MaxRange = 1000f;
+    private const float ConeAngle = 30f;
     private int updateCounter = 0;
-    private const int NotificationInterval = 60; // Show debug info every 60 ticks
-
-    // Array of colors for different rays
-    private readonly Color[] rayColors = new Color[]
-    {
-        Color.Blue,
-        Color.Green,
-        Color.Yellow,
-        Color.Orange,
-        Color.Purple,
-        Color.Cyan,
-        Color.Magenta,
-        Color.White
-    };
+    private const int NotificationInterval = 60;
+    private Random random = new Random();
 
     public override void UpdateBeforeSimulation()
     {
@@ -60,13 +47,6 @@ public class CollisionPredictor : MySessionComponentBase
             return;
         }
 
-        // Get all entities to ignore (player's ship and character)
-        var entitiesToIgnore = new HashSet<IMyEntity>();
-        MyAPIGateway.Entities.GetEntities(entitiesToIgnore, e =>
-            e == grid ||
-            e == player.Character ||
-            (e.GetTopMostParent()?.EntityId == grid.EntityId));
-
         var velocity = grid.Physics.LinearVelocity;
         var speed = velocity.Length();
 
@@ -77,81 +57,47 @@ public class CollisionPredictor : MySessionComponentBase
         if (speed < MinSpeed) return;
 
         var position = grid.Physics.CenterOfMassWorld;
-        var direction = Vector3D.Normalize(velocity);
+        var mainDirection = Vector3D.Normalize(velocity);
 
-        // Generate ray directions
-        List<Vector3D> rayDirections = GenerateRayDirections(direction, ConeAngle, RayCount);
+        // Generate a single random direction within the cone
+        Vector3D rayDirection = GetRandomDirectionInCone(mainDirection);
+        Vector3D rayEnd = position + rayDirection * MaxRange;
 
-        int raysCast = 0;
-        int hitsDetected = 0;
-        string debugText = "";
+        // Draw the ray
+        DrawLine(position, rayEnd, Color.Blue);
 
-        for (int i = 0; i < rayDirections.Count; i++)
+        IHitInfo hitInfo;
+        if (MyAPIGateway.Physics.CastLongRay(position, rayEnd, out hitInfo, false))  // false for closest hit
         {
-            raysCast++;
-            Vector3D rayEnd = position + rayDirections[i] * MaxRange;
-
-            // Debug draw the ray
-            DrawLine(position, rayEnd, rayColors[i % rayColors.Length]);
-
-            IHitInfo hitInfo;
-            if (MyAPIGateway.Physics.CastLongRay(position, rayEnd, out hitInfo, true))
+            if (hitInfo.HitEntity != null)
             {
-                // Check if the hit entity is in the ignore list
-                if (entitiesToIgnore.Contains(hitInfo.HitEntity))
-                    continue;
-
-                hitsDetected++;
-
-                string entityName = hitInfo.HitEntity?.DisplayName ?? "Voxel";
-                debugText += $"Hit: {entityName}\n";
-
-                Color lineColor;
-                if (hitInfo.HitEntity == null) // Voxel hit
-                {
-                    lineColor = IsOnCollisionCourse(position, velocity, hitInfo.Position) ? Color.Red : Color.White;
-                }
-                else // Entity hit
-                {
-                    lineColor = new Color(255, 255, 0); // Yellow color
-                }
-                DrawThickLine(position, hitInfo.Position, lineColor);
+                string entityName = hitInfo.HitEntity.DisplayName ?? "Unknown Entity";
+                MyAPIGateway.Utilities.ShowNotification($"Hit: {entityName}", 1000, MyFontEnum.White);
+                DrawThickLine(position, hitInfo.Position, Color.Yellow);
             }
-        }
-
-        // Display debug information
-        if (updateCounter % NotificationInterval == 0)
-        {
-            Color notificationColor = hitsDetected > 0 ? new Color(255, 255, 0) : Color.White; // Yellow if hits, White if none
-            MyAPIGateway.Utilities.ShowNotification($"Debug: Rays cast: {raysCast}, Hits detected: {hitsDetected}",
-                1000, notificationColor.ToString());
-
-            if (!string.IsNullOrEmpty(debugText))
-                MyAPIGateway.Utilities.ShowNotification(debugText, 2000, MyFontEnum.White);
+            else
+            {
+                MyAPIGateway.Utilities.ShowNotification("Hit: Voxel", 1000, MyFontEnum.White);
+                Color voxelColor = IsOnCollisionCourse(position, velocity, hitInfo.Position) ? Color.Red : Color.White;
+                DrawThickLine(position, hitInfo.Position, voxelColor);
+            }
         }
     }
 
-    private List<Vector3D> GenerateRayDirections(Vector3D mainDirection, float coneAngle, int rayCount)
+    private Vector3D GetRandomDirectionInCone(Vector3D mainDirection)
     {
-        List<Vector3D> directions = new List<Vector3D>();
-        directions.Add(mainDirection); // Central ray
+        double angleRad = MathHelper.ToRadians(ConeAngle);
+        double randomAngle = random.NextDouble() * angleRad;
+        double randomAzimuth = random.NextDouble() * 2 * Math.PI;
 
-        Vector3D perpendicular1 = Vector3D.CalculatePerpendicularVector(mainDirection);
-        Vector3D perpendicular2 = Vector3D.Cross(mainDirection, perpendicular1);
+        Vector3D perp1 = Vector3D.CalculatePerpendicularVector(mainDirection);
+        Vector3D perp2 = Vector3D.Cross(mainDirection, perp1);
 
-        float angleStep = 360f / (rayCount - 1);
-        float radianAngle = MathHelper.ToRadians(coneAngle);
+        double x = Math.Sin(randomAngle) * Math.Cos(randomAzimuth);
+        double y = Math.Sin(randomAngle) * Math.Sin(randomAzimuth);
+        double z = Math.Cos(randomAngle);
 
-        for (int i = 0; i < rayCount - 1; i++)
-        {
-            float angle = MathHelper.ToRadians(angleStep * i);
-            Vector3D rayDirection = Math.Cos(angle) * perpendicular1 +
-                                    Math.Sin(angle) * perpendicular2;
-            rayDirection = Vector3D.Normalize(mainDirection + Math.Tan(radianAngle) * rayDirection);
-            directions.Add(rayDirection);
-        }
-
-        return directions;
+        return Vector3D.Normalize(z * mainDirection + x * perp1 + y * perp2);
     }
 
     private bool IsOnCollisionCourse(Vector3D currentPosition, Vector3 velocity, Vector3D obstaclePosition)

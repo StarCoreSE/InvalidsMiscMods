@@ -24,28 +24,16 @@ public class CollisionPredictor : MySessionComponentBase
         updateCounter++;
 
         var player = MyAPIGateway.Session?.Player;
-        if (player == null)
-        {
-            if (updateCounter % NotificationInterval == 0)
-                MyAPIGateway.Utilities.ShowNotification("Debug: No player found", 1000, MyFontEnum.Red);
+        if (player == null || player.Controller?.ControlledEntity == null)
             return;
-        }
 
         var controlledEntity = player.Controller.ControlledEntity as IMyCockpit;
         if (controlledEntity == null)
-        {
-            if (updateCounter % NotificationInterval == 0)
-                MyAPIGateway.Utilities.ShowNotification("Debug: Player not in cockpit", 1000, MyFontEnum.Red);
             return;
-        }
 
         var grid = controlledEntity.CubeGrid as IMyCubeGrid;
         if (grid == null)
-        {
-            if (updateCounter % NotificationInterval == 0)
-                MyAPIGateway.Utilities.ShowNotification("Debug: No grid found", 1000, MyFontEnum.Red);
             return;
-        }
 
         var velocity = grid.Physics.LinearVelocity;
         var speed = velocity.Length();
@@ -56,30 +44,44 @@ public class CollisionPredictor : MySessionComponentBase
 
         if (speed < MinSpeed) return;
 
-        var position = grid.Physics.CenterOfMassWorld;
         var mainDirection = Vector3D.Normalize(velocity);
+        var gridGroup = grid.GetGridGroup(GridLinkTypeEnum.Mechanical);
 
-        // Generate a single random direction within the cone
-        Vector3D rayDirection = GetRandomDirectionInCone(mainDirection);
-        Vector3D rayEnd = position + rayDirection * MaxRange;
+        // Get bounding box corners
+        BoundingBoxD box = grid.WorldAABB;
+        Vector3D[] corners = new Vector3D[8];
+        box.GetCorners(corners);
 
-        // Draw the ray
-        DrawLine(position, rayEnd, Color.Blue);
-
-        IHitInfo hitInfo;
-        if (MyAPIGateway.Physics.CastLongRay(position, rayEnd, out hitInfo, false))  // false for closest hit
+        foreach (Vector3D corner in corners)
         {
-            if (hitInfo.HitEntity != null)
+            Vector3D rayDirection = GetRandomDirectionInCone(mainDirection);
+            Vector3D rayEnd = corner + rayDirection * MaxRange;
+
+            // Draw the ray
+            DrawLine(corner, rayEnd, Color.Blue);
+
+            IHitInfo hitInfo;
+            if (MyAPIGateway.Physics.CastLongRay(corner, rayEnd, out hitInfo, false))
             {
-                string entityName = hitInfo.HitEntity.DisplayName ?? "Unknown Entity";
-                MyAPIGateway.Utilities.ShowNotification($"Hit: {entityName}", 1000, MyFontEnum.White);
-                DrawThickLine(position, hitInfo.Position, Color.Yellow);
-            }
-            else
-            {
-                MyAPIGateway.Utilities.ShowNotification("Hit: Voxel", 1000, MyFontEnum.White);
-                Color voxelColor = IsOnCollisionCourse(position, velocity, hitInfo.Position) ? Color.Red : Color.White;
-                DrawThickLine(position, hitInfo.Position, voxelColor);
+                if (hitInfo.HitEntity != null)
+                {
+                    // Check if the hit entity is part of our grid group
+                    var hitGrid = hitInfo.HitEntity as IMyCubeGrid;
+                    if (hitGrid != null && hitGrid.GetGridGroup(GridLinkTypeEnum.Mechanical) == gridGroup)
+                        continue;
+
+                    string entityName = hitInfo.HitEntity.DisplayName ?? "Unknown Entity";
+                    if (updateCounter % NotificationInterval == 0)
+                        MyAPIGateway.Utilities.ShowNotification($"Hit: {entityName}", 1000, MyFontEnum.White);
+                    DrawThickLine(corner, hitInfo.Position, Color.Yellow);
+                }
+                else
+                {
+                    if (updateCounter % NotificationInterval == 0)
+                        MyAPIGateway.Utilities.ShowNotification("Hit: Voxel", 1000, MyFontEnum.White);
+                    Color voxelColor = IsOnCollisionCourse(corner, velocity, hitInfo.Position) ? Color.Red : Color.White;
+                    DrawThickLine(corner, hitInfo.Position, voxelColor);
+                }
             }
         }
     }

@@ -1,22 +1,22 @@
-﻿using Sandbox.ModAPI;
+﻿using Sandbox.Game.Entities;
+using Sandbox.ModAPI;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
-using VRageMath;
 using VRage.ModAPI;
-using System.Collections.Generic;
-using VRage.Game;
-using IMyCockpit = Sandbox.ModAPI.Ingame.IMyCockpit;
-using System;
 using VRage.Utils;
-using System.Linq;
-using static VRageRender.MyBillboard;
-using Sandbox.Game.Entities;
+using VRageMath;
+using IMyCockpit = Sandbox.ModAPI.Ingame.IMyCockpit;
 
 [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
 public class CollisionPredictor : MySessionComponentBase
 {
     private const float MinSpeed = 2f;
     private const float MaxRange = 1000f;
+    private const double VoxelRayRange = 20000; // Fixed view distance in meters, adjust as needed
     private const int NotificationInterval = 60;
     private const float BaseSearchAngle = 360f;
     private const float MinSearchAngle = 30f;
@@ -29,10 +29,6 @@ public class CollisionPredictor : MySessionComponentBase
     private const float ThreatLevelDecayRate = 0.9f; // How quickly threat level decays per update
     private const bool ShowDebugSpheres = true; // Toggle for showing prediction spheres
     private const float DebugSphereSize = 2f; // Size of the debug spheres
-
-    private string currentWarningMessage = null;
-    private int warningStartTime = 0;
-    private const int WarningDuration = 60; // 60 ticks = 1 second at 60 fps
 
     private Dictionary<long, StoredTarget> trackedTargets = new Dictionary<long, StoredTarget>();
     private int updateCounter = 0;
@@ -66,6 +62,10 @@ public class CollisionPredictor : MySessionComponentBase
 
     public override void UpdateBeforeSimulation()
     {
+        // Only run on clients
+        if (MyAPIGateway.Utilities.IsDedicated && MyAPIGateway.Session.IsServer)
+            return;
+
         updateCounter++;
 
         var player = MyAPIGateway.Session?.Player;
@@ -113,7 +113,7 @@ public class CollisionPredictor : MySessionComponentBase
             UpdateTargetTracking(closestCollisionTarget);
         }
 
-        DisplayWarnings(gridCenter, mySpeed); 
+        DisplayWarnings(gridCenter, mySpeed);
     }
 
     private CollisionTarget ScanForCollisions(IMyCubeGrid grid, IMyGridGroupData gridGroup, Vector3D gridCenter,
@@ -349,14 +349,13 @@ public class CollisionPredictor : MySessionComponentBase
         if (voxelScanCounter % VoxelScanInterval != 0) return;
 
         voxelHazards.Clear();
-        double viewDistance = 20000; // Fixed view distance in meters, adjust as needed
         Vector3D mainDirection = Vector3D.Normalize(velocityDirection);
 
         // Create a cone of rays around the velocity vector
         for (int i = 0; i < VoxelRayCount; i++)
         {
             Vector3D rayDirection = GetRandomDirectionInCone(mainDirection, (float)VoxelScanSpread);
-            Vector3D rayEnd = gridCenter + (rayDirection * viewDistance);
+            Vector3D rayEnd = gridCenter + (rayDirection * VoxelRayRange);
             LineD ray = new LineD(gridCenter, rayEnd);
 
             List<MyLineSegmentOverlapResult<MyVoxelBase>> voxelHits = new List<MyLineSegmentOverlapResult<MyVoxelBase>>();
@@ -373,7 +372,7 @@ public class CollisionPredictor : MySessionComponentBase
                     double timeToCollision = distance / Math.Max(speed, 0.1); // Avoid division by zero
 
                     // Only store if it's a potential threat
-                    if (timeToCollision < viewDistance / speed)
+                    if (timeToCollision < VoxelRayRange / speed)
                     {
                         voxelHazards[intersection.Value] = timeToCollision;
                     }

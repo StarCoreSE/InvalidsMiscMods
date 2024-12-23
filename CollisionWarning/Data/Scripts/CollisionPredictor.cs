@@ -8,6 +8,9 @@ using VRage.Game;
 using IMyCockpit = Sandbox.ModAPI.Ingame.IMyCockpit;
 using System;
 using VRage.Utils;
+using System.Linq;
+using static VRageRender.MyBillboard;
+using Sandbox.Game.Entities;
 
 [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
 public class CollisionPredictor : MySessionComponentBase
@@ -21,9 +24,25 @@ public class CollisionPredictor : MySessionComponentBase
     private const int TargetMemoryDuration = 180;
     private const float RaycastDensity = 0.1f; // Adjusts number of raycasts
 
+    private const int MaxTrackedTargets = 100; // Maximum number of targets to track and display
+    private const float MinimumThreatLevelToTrack = 0.1f; // Minimum threat level to consider tracking a target
+    private const float ThreatLevelDecayRate = 0.9f; // How quickly threat level decays per update
+    private const bool ShowDebugSpheres = true; // Toggle for showing prediction spheres
+    private const float DebugSphereSize = 2f; // Size of the debug spheres
+
+    private string currentWarningMessage = null;
+    private int warningStartTime = 0;
+    private const int WarningDuration = 60; // 60 ticks = 1 second at 60 fps
+
     private Dictionary<long, StoredTarget> trackedTargets = new Dictionary<long, StoredTarget>();
     private int updateCounter = 0;
     private Random random = new Random();
+
+    private const int VoxelScanInterval = 60; // How often to scan for voxels (every 60 frames)
+    private const double VoxelScanSpread = 15.0; // Degrees spread around velocity vector
+    private const int VoxelRayCount = 8; // Number of rays to cast for voxel detection
+    private Dictionary<Vector3D, double> voxelHazards = new Dictionary<Vector3D, double>(); // Store detected voxel collision points
+    private int voxelScanCounter = 0;
 
     private class CollisionTarget
     {
@@ -66,13 +85,11 @@ public class CollisionPredictor : MySessionComponentBase
 
         if (mySpeed < MinSpeed) return;
 
-        // Calculate search angle based on speed
         float currentSearchAngle = Math.Max(
             MinSearchAngle,
             BaseSearchAngle - (float)(mySpeed * SpeedAngleReductionFactor)
         );
 
-        // Calculate acceleration direction and adjust search angle
         Vector3D accelerationDirection = Vector3D.Zero;
         if (controlledEntity.MoveIndicator != Vector3.Zero)
         {
@@ -89,11 +106,14 @@ public class CollisionPredictor : MySessionComponentBase
 
         CollisionTarget closestCollisionTarget = ScanForCollisions(grid, gridGroup, gridCenter, myVelocity, mainDirection, currentSearchAngle);
 
+        ScanForVoxelHazards(gridCenter, myVelocity, mySpeed);
+
         if (closestCollisionTarget != null)
         {
             UpdateTargetTracking(closestCollisionTarget);
-            DisplayWarnings(closestCollisionTarget, mySpeed, gridCenter);
         }
+
+        DisplayWarnings(gridCenter, mySpeed); 
     }
 
     private CollisionTarget ScanForCollisions(IMyCubeGrid grid, IMyGridGroupData gridGroup, Vector3D gridCenter,
@@ -102,7 +122,7 @@ public class CollisionPredictor : MySessionComponentBase
         CollisionTarget closestCollisionTarget = null;
         double closestCollisionTime = double.MaxValue;
 
-        // First check previously tracked targets
+        // Check previously tracked targets
         foreach (var storedTarget in trackedTargets.Values)
         {
             if (storedTarget.Entity?.Physics != null)
@@ -184,15 +204,37 @@ public class CollisionPredictor : MySessionComponentBase
         return closestCollisionTarget;
     }
 
+    private void UpdateTopThreats()
+    {
+        var sortedTargets = trackedTargets.Values
+            .Where(t => t.IsCurrentThreat && t.ThreatLevel >= MinimumThreatLevelToTrack)
+            .OrderByDescending(t => t.ThreatLevel)
+            .Take(MaxTrackedTargets)
+            .ToList();
+
+        var targetIdsToKeep = sortedTargets.Select(t => t.Entity.EntityId).ToHashSet();
+        var idsToRemove = trackedTargets.Keys
+            .Where(id => !targetIdsToKeep.Contains(id))
+            .ToList();
+
+        foreach (var id in idsToRemove)
+        {
+            trackedTargets.Remove(id);
+        }
+    }
+
     private void UpdateTrackedTargets()
     {
         List<long> targetsToRemove = new List<long>();
         foreach (var kvp in trackedTargets)
         {
-            kvp.Value.LastSeenCounter++;
-            kvp.Value.IsCurrentThreat = false;
+            var target = kvp.Value;
+            target.LastSeenCounter++;
+            target.IsCurrentThreat = false;
 
-            if (kvp.Value.LastSeenCounter > TargetMemoryDuration)
+            target.ThreatLevel *= ThreatLevelDecayRate;
+
+            if (target.LastSeenCounter > TargetMemoryDuration || target.ThreatLevel < MinimumThreatLevelToTrack)
             {
                 targetsToRemove.Add(kvp.Key);
             }
@@ -202,6 +244,8 @@ public class CollisionPredictor : MySessionComponentBase
         {
             trackedTargets.Remove(targetId);
         }
+
+        UpdateTopThreats();
     }
 
     private void UpdateTargetTracking(CollisionTarget newTarget)
@@ -223,23 +267,117 @@ public class CollisionPredictor : MySessionComponentBase
         storedTarget.IsCurrentThreat = true;
     }
 
-    private void DisplayWarnings(CollisionTarget target, double mySpeed, Vector3D gridCenter)
+    private void DisplayWarnings(Vector3D gridCenter, double mySpeed)  // Added mySpeed parameter
     {
-        if (target.TimeToCollision < MaxRange / mySpeed)
+        var sortedThreats = trackedTargets.Values
+            .Where(t => t.IsCurrentThreat && t.ThreatLevel >= MinimumThreatLevelToTrack)
+            .OrderByDescending(t => t.ThreatLevel)
+            .Take(MaxTrackedTargets);
+
+        // Visual warnings (lines and spheres)
+        foreach (var target in sortedThreats)
         {
-            Color warningColor = GetWarningColor(target.TimeToCollision * mySpeed, target.ThreatLevel);
-            DrawLine(gridCenter, target.Position, warningColor);
+            Color warningColor = GetWarningColor(target.LastTimeToCollision, target.ThreatLevel);
+            DrawLine(gridCenter, target.LastPosition, warningColor);
 
-            if (updateCounter % NotificationInterval == 0)
+            if (ShowDebugSpheres)
             {
-                string entityName = target.Entity?.DisplayName ?? "Unknown Entity";
-                string relativeSpeed = target.Velocity.HasValue ?
-                    $", Relative Speed: {(target.Velocity.Value).Length():F1} m/s" : "";
-                string threatLevel = $", Threat Level: {target.ThreatLevel:F1}";
+                DrawDebugSphere(target.LastPosition, DebugSphereSize, warningColor);
 
-                MyAPIGateway.Utilities.ShowNotification(
-                    $"Warning: Potential collision with {entityName} in {target.TimeToCollision:F1}s{relativeSpeed}{threatLevel}",
-                    1000, MyFontEnum.Red);
+                if (target.LastVelocity.HasValue)
+                {
+                    Vector3D predictedPos = target.LastPosition +
+                                            target.LastVelocity.Value * target.LastTimeToCollision;
+                    DrawDebugSphere(predictedPos, DebugSphereSize * 0.5f, Color.Yellow);
+                }
+            }
+        }
+
+        // Display voxel hazards
+        foreach (var hazard in voxelHazards)
+        {
+            Color hazardColor = GetWarningColor(hazard.Value, hazard.Value * mySpeed);
+            DrawLine(gridCenter, hazard.Key, hazardColor);
+
+            if (ShowDebugSpheres)
+            {
+                DrawDebugSphere(hazard.Key, DebugSphereSize * 2f, hazardColor); // Larger sphere for voxel impacts
+            }
+        }
+
+        // Text notification
+        if (updateCounter % NotificationInterval == 0)
+        {
+            // Check for closest voxel hazard
+            var closestVoxelHazard = voxelHazards.OrderBy(h => h.Value).FirstOrDefault();
+            var highestThreat = sortedThreats.FirstOrDefault();
+
+            // Determine which warning to show based on which is closer
+            if (closestVoxelHazard.Value > 0 &&
+                (highestThreat == null || closestVoxelHazard.Value < highestThreat.LastTimeToCollision))
+            {
+                string message = $"COLLISION WARNING [Asteroid]: {closestVoxelHazard.Value:F1}s";
+                if (trackedTargets.Count > 0)
+                {
+                    message += $" | +{trackedTargets.Count} threats";
+                }
+                MyAPIGateway.Utilities.ShowNotification(message, 1000, MyFontEnum.Red);
+            }
+            else if (highestThreat != null)
+            {
+                string gridName = highestThreat.Entity?.DisplayName ?? "Unknown";
+                int additionalThreatsCount = trackedTargets.Count - 1;
+                string message;
+
+                if (additionalThreatsCount > 0)
+                {
+                    message = $"COLLISION WARNING [{gridName}]: {highestThreat.LastTimeToCollision:F1}s | +{additionalThreatsCount} threats";
+                }
+                else
+                {
+                    message = $"COLLISION WARNING [{gridName}]: {highestThreat.LastTimeToCollision:F1}s";
+                }
+
+                MyAPIGateway.Utilities.ShowNotification(message, 1000, MyFontEnum.Red);
+            }
+        }
+    }
+
+    private void ScanForVoxelHazards(Vector3D gridCenter, Vector3D velocityDirection, double speed)
+    {
+        voxelScanCounter++;
+        if (voxelScanCounter % VoxelScanInterval != 0) return;
+
+        voxelHazards.Clear();
+        double viewDistance = 20000; // Fixed view distance in meters, adjust as needed
+        Vector3D mainDirection = Vector3D.Normalize(velocityDirection);
+
+        // Create a cone of rays around the velocity vector
+        for (int i = 0; i < VoxelRayCount; i++)
+        {
+            Vector3D rayDirection = GetRandomDirectionInCone(mainDirection, (float)VoxelScanSpread);
+            Vector3D rayEnd = gridCenter + (rayDirection * viewDistance);
+            LineD ray = new LineD(gridCenter, rayEnd);
+
+            List<MyLineSegmentOverlapResult<MyVoxelBase>> voxelHits = new List<MyLineSegmentOverlapResult<MyVoxelBase>>();
+            MyGamePruningStructure.GetVoxelMapsOverlappingRay(ref ray, voxelHits);
+
+            foreach (var voxelHit in voxelHits)
+            {
+                Vector3D? intersection;
+                voxelHit.Element.GetIntersectionWithLine(ref ray, out intersection, false);
+
+                if (intersection.HasValue)
+                {
+                    double distance = Vector3D.Distance(gridCenter, intersection.Value);
+                    double timeToCollision = distance / Math.Max(speed, 0.1); // Avoid division by zero
+
+                    // Only store if it's a potential threat
+                    if (timeToCollision < viewDistance / speed)
+                    {
+                        voxelHazards[intersection.Value] = timeToCollision;
+                    }
+                }
             }
         }
     }
@@ -249,7 +387,7 @@ public class CollisionPredictor : MySessionComponentBase
         double relativeSpeed = targetVelocity.HasValue ?
             (myVelocity - targetVelocity.Value).Length() : myVelocity.Length();
 
-        return (relativeSpeed * relativeSpeed) / (timeToCollision + 1.0); // Adding 1.0 to avoid division by zero
+        return (relativeSpeed * relativeSpeed) / (timeToCollision + 1.0);
     }
 
     private double? CalculateTimeToCollision(Vector3D myPosition, Vector3D myVelocity,
@@ -299,8 +437,15 @@ public class CollisionPredictor : MySessionComponentBase
 
     private void DrawLine(Vector3D start, Vector3D end, Color color)
     {
-        Vector4 colorVector = color.ToVector4();
-        MySimpleObjectDraw.DrawLine(start, end, MyStringId.GetOrCompute("Square"), ref colorVector, 0.2f);
+        var color1 = color.ToVector4();
+        MySimpleObjectDraw.DrawLine(start, end, MyStringId.GetOrCompute("Square"), ref color1, 0.2f);
+    }
+
+    private void DrawDebugSphere(Vector3D position, float radius, Color color)
+    {
+        var matrix = MatrixD.CreateTranslation(position);
+        Color color1 = color.ToVector4();
+        MySimpleObjectDraw.DrawTransparentSphere(ref matrix, radius, ref color1, (MySimpleObjectRasterizer)0.5f, 32, MyStringId.GetOrCompute("Square"));
     }
 
     protected override void UnloadData() { }

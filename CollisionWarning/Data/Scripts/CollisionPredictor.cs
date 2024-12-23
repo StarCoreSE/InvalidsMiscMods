@@ -115,7 +115,6 @@ public class CollisionPredictor : MySessionComponentBase
 
         DisplayWarnings(gridCenter, mySpeed);
     }
-
     private CollisionTarget ScanForCollisions(IMyCubeGrid grid, IMyGridGroupData gridGroup, Vector3D gridCenter,
         Vector3D myVelocity, Vector3D mainDirection, float searchAngle)
     {
@@ -203,7 +202,6 @@ public class CollisionPredictor : MySessionComponentBase
 
         return closestCollisionTarget;
     }
-
     private void UpdateTopThreats()
     {
         var sortedTargets = trackedTargets.Values
@@ -222,7 +220,6 @@ public class CollisionPredictor : MySessionComponentBase
             trackedTargets.Remove(id);
         }
     }
-
     private void UpdateTrackedTargets()
     {
         List<long> targetsToRemove = new List<long>();
@@ -247,7 +244,6 @@ public class CollisionPredictor : MySessionComponentBase
 
         UpdateTopThreats();
     }
-
     private void UpdateTargetTracking(CollisionTarget newTarget)
     {
         long entityId = newTarget.Entity.EntityId;
@@ -266,7 +262,6 @@ public class CollisionPredictor : MySessionComponentBase
         storedTarget.ThreatLevel = newTarget.ThreatLevel;
         storedTarget.IsCurrentThreat = true;
     }
-
     private void DisplayWarnings(Vector3D gridCenter, double mySpeed)  // Added mySpeed parameter
     {
         var sortedThreats = trackedTargets.Values
@@ -342,7 +337,6 @@ public class CollisionPredictor : MySessionComponentBase
             }
         }
     }
-
     private void ScanForVoxelHazards(Vector3D gridCenter, Vector3D velocityDirection, double speed)
     {
         voxelScanCounter++;
@@ -380,7 +374,6 @@ public class CollisionPredictor : MySessionComponentBase
             }
         }
     }
-
     private double CalculateThreatLevel(double timeToCollision, Vector3D myVelocity, Vector3D? targetVelocity)
     {
         double relativeSpeed = targetVelocity.HasValue ?
@@ -388,7 +381,6 @@ public class CollisionPredictor : MySessionComponentBase
 
         return (relativeSpeed * relativeSpeed) / (timeToCollision + 1.0);
     }
-
     private double? CalculateTimeToCollision(Vector3D myPosition, Vector3D myVelocity,
         Vector3D targetPosition, Vector3D? targetVelocity)
     {
@@ -406,7 +398,6 @@ public class CollisionPredictor : MySessionComponentBase
 
         return dot / (relativeSpeed * relativeSpeed);
     }
-
     private Color GetWarningColor(double distance, double threatLevel)
     {
         float normalizedDistance = (float)(Math.Min(Math.Max(distance, 0), MaxRange) / MaxRange);
@@ -417,7 +408,6 @@ public class CollisionPredictor : MySessionComponentBase
             (byte)(255 * normalizedDistance),
             0);
     }
-
     private Vector3D GetRandomDirectionInCone(Vector3D mainDirection, float coneAngle)
     {
         double angleRad = MathHelper.ToRadians(coneAngle);
@@ -433,19 +423,16 @@ public class CollisionPredictor : MySessionComponentBase
 
         return Vector3D.Normalize(z * mainDirection + x * perp1 + y * perp2);
     }
-
     private void DrawLine(Vector3D start, Vector3D end, Color color)
     {
         var color1 = color.ToVector4();
         MySimpleObjectDraw.DrawLine(start, end, MyStringId.GetOrCompute("Square"), ref color1, 0.2f);
     }
-
     private void DrawDebugSphere(Vector3D position, float radius, Color color)
     {
         var matrix = MatrixD.CreateTranslation(position);
         Color color1 = color.ToVector4();
         MySimpleObjectDraw.DrawTransparentSphere(ref matrix, radius, ref color1, (MySimpleObjectRasterizer)0.5f, 32, MyStringId.GetOrCompute("Square"));
     }
-
     protected override void UnloadData() { }
 }

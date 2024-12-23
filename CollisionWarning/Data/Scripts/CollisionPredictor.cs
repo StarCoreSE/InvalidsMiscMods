@@ -330,10 +330,14 @@ public class CollisionPredictor : MySessionComponentBase
     }
     private double CalculateThreatLevel(double timeToCollision, Vector3D myVelocity, Vector3D? targetVelocity)
     {
-        double relativeSpeed = targetVelocity.HasValue ?
-            (myVelocity - targetVelocity.Value).Length() : myVelocity.Length();
+        // Relative speed squared, as kinetic energy is proportional to v^2
+        double relativeSpeed = targetVelocity.HasValue
+            ? (myVelocity - targetVelocity.Value).LengthSquared()
+            : myVelocity.LengthSquared();
 
-        return (relativeSpeed * relativeSpeed) / (timeToCollision + 1.0);
+        // Apply weighting for time to collision to scale the threat level logarithmically
+        double timeFactor = 1.0 / (timeToCollision + 0.5); // Add offset to avoid division by zero
+        return relativeSpeed * timeFactor;
     }
     private double? CalculateTimeToCollision(Vector3D myPosition, Vector3D myVelocity,
         Vector3D targetPosition, Vector3D? targetVelocity)
@@ -352,15 +356,18 @@ public class CollisionPredictor : MySessionComponentBase
 
         return dot / (relativeSpeed * relativeSpeed);
     }
-    private Color GetWarningColor(double distance, double threatLevel)
+    private Color GetWarningColor(double timeToCollision, double threatLevel)
     {
-        float normalizedDistance = (float)(Math.Min(Math.Max(distance, 0), MaxRange) / MaxRange);
-        float normalizedThreat = (float)Math.Min(threatLevel / 100.0, 1.0);
+        // Normalize time-to-collision (nearer threats are more red)
+        float normalizedTime = 1f - (float)Math.Min(timeToCollision / MaxRange, 1.0);
+
+        // Normalize threat level with an exponential factor for more gradation
+        float normalizedThreat = (float)Math.Min(Math.Pow(threatLevel / 100.0, 0.5), 1.0);
 
         return new Color(
-            (byte)(255 * (1 - normalizedDistance) * normalizedThreat),
-            (byte)(255 * normalizedDistance),
-            0);
+            (byte)(255 * normalizedThreat),  // Red increases with threat
+            (byte)(255 * (1.0 - normalizedThreat) * normalizedTime),  // Green diminishes closer to impact
+            0); // Blue remains 0 for pure warning colors
     }
     private Vector3D GetRandomDirectionInCone(Vector3D mainDirection, float coneAngle)
     {

@@ -19,9 +19,6 @@ public class CollisionPredictor : MySessionComponentBase
 
     private int updateCounter = 0;
     private Random random = new Random();
-    private IMyEntity currentCollisionTarget = null;
-    private Vector3D currentCollisionPoint;
-    private double currentTimeToCollision;
 
     private class CollisionTarget
     {
@@ -104,7 +101,7 @@ public class CollisionPredictor : MySessionComponentBase
         if (closestCollisionTarget != null && closestCollisionTarget.TimeToCollision < MaxRange / mySpeed)
         {
             Color warningColor = GetWarningColor(closestCollisionTarget.TimeToCollision * mySpeed);
-            DrawThickLine(gridCenter, closestCollisionTarget.Position, warningColor);
+            DrawLine(gridCenter, closestCollisionTarget.Position, warningColor);
 
             if (updateCounter % NotificationInterval == 0)
             {
@@ -163,22 +160,10 @@ public class CollisionPredictor : MySessionComponentBase
         return Vector3D.Normalize(z * mainDirection + x * perp1 + y * perp2);
     }
 
-    private bool IsOnCollisionCourse(Vector3D currentPosition, Vector3 velocity, Vector3D obstaclePosition)
-    {
-        Vector3D predictedPosition = currentPosition + velocity;
-        return Vector3D.Distance(predictedPosition, obstaclePosition) < 10;
-    }
-
     private void DrawLine(Vector3D start, Vector3D end, Color color)
     {
         Vector4 colorVector = color.ToVector4();
-        MySimpleObjectDraw.DrawLine(start, end, MyStringId.GetOrCompute("Square"), ref colorVector, 1f);
-    }
-
-    private void DrawThickLine(Vector3D start, Vector3D end, Color color)
-    {
-        Vector4 colorVector = color.ToVector4();
-        MySimpleObjectDraw.DrawLine(start, end, MyStringId.GetOrCompute("Square"), ref colorVector, 2f);
+        MySimpleObjectDraw.DrawLine(start, end, MyStringId.GetOrCompute("Square"), ref colorVector, 0.5f);
     }
 
     protected override void UnloadData() { }

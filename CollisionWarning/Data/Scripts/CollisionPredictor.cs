@@ -25,10 +25,13 @@ public class CollisionPredictor : MySessionComponentBase
 
     private const int MaxTrackedTargets = 100; // Maximum number of targets to track and display
     private const float MinimumThreatLevelToTrack = 0.1f; // Minimum threat level to consider tracking a target
-    private const float ThreatLevelDecayRate = 0.95f; // How quickly threat level decays per update
+    private const float ThreatLevelDecayRate = 0.9f; // How quickly threat level decays per update
     private const bool ShowDebugSpheres = true; // Toggle for showing prediction spheres
     private const float DebugSphereSize = 2f; // Size of the debug spheres
 
+    private string currentWarningMessage = null;
+    private int warningStartTime = 0;
+    private const int WarningDuration = 60; // 60 ticks = 1 second at 60 fps
 
     private Dictionary<long, StoredTarget> trackedTargets = new Dictionary<long, StoredTarget>();
     private int updateCounter = 0;
@@ -280,10 +283,11 @@ public class CollisionPredictor : MySessionComponentBase
             }
         }
 
-        if (updateCounter % NotificationInterval == 0)
+        // Handle warning message display
+        var highestThreat = sortedThreats.FirstOrDefault();
+        if (highestThreat != null)
         {
-            var highestThreat = sortedThreats.FirstOrDefault();
-            if (highestThreat != null)
+            if (updateCounter % NotificationInterval == 0 || currentWarningMessage == null)
             {
                 string entityName = highestThreat.Entity?.DisplayName ?? "Unknown Entity";
                 string relativeSpeed = highestThreat.LastVelocity.HasValue ?
@@ -292,10 +296,23 @@ public class CollisionPredictor : MySessionComponentBase
                 string additionalThreats = trackedTargets.Count > 1 ?
                     $" (+{trackedTargets.Count - 1} more threats)" : "";
 
-                MyAPIGateway.Utilities.ShowNotification(
-                    $"Warning: {entityName} in {highestThreat.LastTimeToCollision:F1}s{relativeSpeed}{threatLevel}{additionalThreats}",
-                    1000, MyFontEnum.Red);
+                currentWarningMessage =
+                    $"Warning: {entityName} in {highestThreat.LastTimeToCollision:F1}s{relativeSpeed}{threatLevel}{additionalThreats}";
+                warningStartTime = updateCounter;
             }
+        }
+        else
+        {
+            currentWarningMessage = null;
+        }
+
+        // Display current warning if it exists and hasn't expired
+        if (currentWarningMessage != null &&
+            (updateCounter - warningStartTime) < WarningDuration)
+        {
+            MyAPIGateway.Utilities.ShowNotification(
+                currentWarningMessage,
+                1000, MyFontEnum.Red);
         }
     }
 

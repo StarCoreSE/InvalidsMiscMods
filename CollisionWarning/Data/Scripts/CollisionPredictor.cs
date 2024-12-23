@@ -265,6 +265,7 @@ public class CollisionPredictor : MySessionComponentBase
             .OrderByDescending(t => t.ThreatLevel)
             .Take(MaxTrackedTargets);
 
+        // Visual warnings (lines and spheres)
         foreach (var target in sortedThreats)
         {
             Color warningColor = GetWarningColor(target.LastTimeToCollision, target.ThreatLevel);
@@ -277,42 +278,33 @@ public class CollisionPredictor : MySessionComponentBase
                 if (target.LastVelocity.HasValue)
                 {
                     Vector3D predictedPos = target.LastPosition +
-                        target.LastVelocity.Value * target.LastTimeToCollision;
+                                            target.LastVelocity.Value * target.LastTimeToCollision;
                     DrawDebugSphere(predictedPos, DebugSphereSize * 0.5f, Color.Yellow);
                 }
             }
         }
 
-        // Handle warning message display
-        var highestThreat = sortedThreats.FirstOrDefault();
-        if (highestThreat != null)
+        // Text notification
+        if (updateCounter % NotificationInterval == 0)
         {
-            if (updateCounter % NotificationInterval == 0 || currentWarningMessage == null)
+            var highestThreat = sortedThreats.FirstOrDefault();
+            if (highestThreat != null)
             {
-                string entityName = highestThreat.Entity?.DisplayName ?? "Unknown Entity";
-                string relativeSpeed = highestThreat.LastVelocity.HasValue ?
-                    $", Speed: {highestThreat.LastVelocity.Value.Length():F1} m/s" : "";
-                string threatLevel = $", Threat: {highestThreat.ThreatLevel:F1}";
-                string additionalThreats = trackedTargets.Count > 1 ?
-                    $" (+{trackedTargets.Count - 1} more threats)" : "";
+                string gridName = highestThreat.Entity?.DisplayName ?? "Unknown";
+                int additionalThreatsCount = trackedTargets.Count - 1;
+                string message;
 
-                currentWarningMessage =
-                    $"Warning: {entityName} in {highestThreat.LastTimeToCollision:F1}s{relativeSpeed}{threatLevel}{additionalThreats}";
-                warningStartTime = updateCounter;
+                if (additionalThreatsCount > 0)
+                {
+                    message = $"COLLISION WARNING [{gridName}]: {highestThreat.LastTimeToCollision:F1}s | +{additionalThreatsCount} threats";
+                }
+                else
+                {
+                    message = $"COLLISION WARNING [{gridName}]: {highestThreat.LastTimeToCollision:F1}s";
+                }
+
+                MyAPIGateway.Utilities.ShowNotification(message, 1000, MyFontEnum.Red);
             }
-        }
-        else
-        {
-            currentWarningMessage = null;
-        }
-
-        // Display current warning if it exists and hasn't expired
-        if (currentWarningMessage != null &&
-            (updateCounter - warningStartTime) < WarningDuration)
-        {
-            MyAPIGateway.Utilities.ShowNotification(
-                currentWarningMessage,
-                1000, MyFontEnum.Red);
         }
     }
 

@@ -14,7 +14,7 @@ using IMyCockpit = Sandbox.ModAPI.Ingame.IMyCockpit;
 [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
 public class CollisionPredictor : MySessionComponentBase
 {
-    private const float MinSpeed = 20f;
+    private const float MinSpeed = 2f;
     private const float MaxRange = 1000f;
     private const double VoxelRayRange = 20000; // Fixed view distance in meters, adjust as needed
     private const int NotificationInterval = 60;
@@ -62,7 +62,6 @@ public class CollisionPredictor : MySessionComponentBase
 
     public override void UpdateBeforeSimulation()
     {
-        // Only run on clients
         if (MyAPIGateway.Utilities.IsDedicated && MyAPIGateway.Session.IsServer)
             return;
 
@@ -85,122 +84,75 @@ public class CollisionPredictor : MySessionComponentBase
 
         if (mySpeed < MinSpeed) return;
 
-        float currentSearchAngle = Math.Max(
-            MinSearchAngle,
-            BaseSearchAngle - (float)(mySpeed * SpeedAngleReductionFactor)
-        );
-
-        Vector3D accelerationDirection = Vector3D.Zero;
-        if (controlledEntity.MoveIndicator != Vector3.Zero)
-        {
-            accelerationDirection = Vector3D.Transform(controlledEntity.MoveIndicator, controlledEntity.WorldMatrix);
-            float angleToAccel = (float)Vector3D.Angle(myVelocity, accelerationDirection);
-            currentSearchAngle = Math.Min(BaseSearchAngle, currentSearchAngle + angleToAccel);
-        }
+        var gridCenter = grid.Physics.CenterOfMassWorld;
 
         UpdateTrackedTargets();
 
-        var mainDirection = Vector3D.Normalize(myVelocity);
-        var gridGroup = grid.GetGridGroup(GridLinkTypeEnum.Mechanical);
-        var gridCenter = grid.Physics.CenterOfMassWorld;
-
-        CollisionTarget closestCollisionTarget = ScanForCollisions(grid, gridGroup, gridCenter, myVelocity, mainDirection, currentSearchAngle);
+        ScanForCollisions(grid, gridCenter, myVelocity);
 
         ScanForVoxelHazards(gridCenter, myVelocity, mySpeed);
 
-        if (closestCollisionTarget != null)
-        {
-            UpdateTargetTracking(closestCollisionTarget);
-        }
-
         DisplayWarnings(gridCenter, mySpeed);
     }
-    private CollisionTarget ScanForCollisions(IMyCubeGrid grid, IMyGridGroupData gridGroup, Vector3D gridCenter,
-        Vector3D myVelocity, Vector3D mainDirection, float searchAngle)
+    private void ScanForCollisions(IMyCubeGrid myGrid, Vector3D gridCenter, Vector3D myVelocity)
     {
-        CollisionTarget closestCollisionTarget = null;
-        double closestCollisionTime = double.MaxValue;
-
-        // Check previously tracked targets
-        foreach (var storedTarget in trackedTargets.Values)
+        var visibleEntities = new HashSet<IMyEntity>();
+        MyAPIGateway.Entities.GetEntities(null, (entity) =>
         {
-            if (storedTarget.Entity?.Physics != null)
+            if (entity is IMyCubeGrid && entity != myGrid)
             {
-                Vector3D currentTargetPos = storedTarget.Entity.Physics.CenterOfMassWorld;
-                Vector3D currentTargetVel = storedTarget.Entity.Physics.LinearVelocity;
+                visibleEntities.Add(entity);
+            }
+            return false;
+        });
 
-                double? timeToCollision = CalculateTimeToCollision(
-                    gridCenter, myVelocity,
-                    currentTargetPos, currentTargetVel);
+        foreach (var entity in visibleEntities)
+        {
+            var targetGrid = entity as IMyCubeGrid;
+            if (targetGrid == null) continue;
 
-                if (timeToCollision.HasValue && timeToCollision.Value < closestCollisionTime)
+            Vector3D targetCenter = targetGrid.Physics.CenterOfMassWorld;
+            Vector3D targetVelocity = targetGrid.Physics.LinearVelocity;
+
+            // Check if the target is within a reasonable range
+            double distanceToTarget = Vector3D.Distance(gridCenter, targetCenter);
+            if (distanceToTarget > MaxRange) continue;
+
+            // Check if we're on a collision course
+            Vector3D relativePosition = targetCenter - gridCenter;
+            Vector3D relativeVelocity = targetVelocity - myVelocity;
+
+            // Calculate the time of closest approach
+            double timeToClosestApproach = -Vector3D.Dot(relativePosition, relativeVelocity) / relativeVelocity.LengthSquared();
+
+            // If the time is negative, we've already passed the closest point
+            if (timeToClosestApproach < 0) continue;
+
+            // Calculate the distance at closest approach
+            Vector3D positionAtClosestApproach = relativePosition + relativeVelocity * timeToClosestApproach;
+            double distanceAtClosestApproach = positionAtClosestApproach.Length();
+
+            // If the distance at closest approach is greater than the sum of the grids' bounding spheres, no collision
+            double collisionThreshold = myGrid.WorldVolume.Radius + targetGrid.WorldVolume.Radius;
+            if (distanceAtClosestApproach > collisionThreshold) continue;
+
+            // If we've made it this far, calculate the actual time to collision
+            double? timeToCollision = CalculateTimeToCollision(gridCenter, myVelocity, targetCenter, targetVelocity);
+
+            if (timeToCollision.HasValue)
+            {
+                double threatLevel = CalculateThreatLevel(timeToCollision.Value, myVelocity, targetVelocity);
+
+                UpdateTargetTracking(new CollisionTarget
                 {
-                    closestCollisionTime = timeToCollision.Value;
-                    double threatLevel = CalculateThreatLevel(timeToCollision.Value, myVelocity, currentTargetVel);
-
-                    closestCollisionTarget = new CollisionTarget
-                    {
-                        Entity = storedTarget.Entity,
-                        Position = currentTargetPos,
-                        Velocity = currentTargetVel,
-                        TimeToCollision = timeToCollision.Value,
-                        ThreatLevel = threatLevel
-                    };
-                }
+                    Entity = targetGrid,
+                    Position = targetCenter,
+                    Velocity = targetVelocity,
+                    TimeToCollision = timeToCollision.Value,
+                    ThreatLevel = threatLevel
+                });
             }
         }
-
-        // Perform new raycasts
-        BoundingBoxD box = grid.WorldAABB;
-        Vector3D[] corners = new Vector3D[8];
-        box.GetCorners(corners);
-
-        int raycastCount = Math.Max(1, (int)(searchAngle * RaycastDensity));
-
-        foreach (Vector3D corner in corners)
-        {
-            for (int i = 0; i < raycastCount; i++)
-            {
-                Vector3D rayDirection = GetRandomDirectionInCone(mainDirection, searchAngle);
-                Vector3D rayEnd = corner + rayDirection * MaxRange;
-
-                IHitInfo hitInfo;
-                if (MyAPIGateway.Physics.CastLongRay(corner, rayEnd, out hitInfo, false))
-                {
-                    if (hitInfo.HitEntity == null) continue;
-
-                    var hitGrid = hitInfo.HitEntity as IMyCubeGrid;
-                    if (hitGrid != null && hitGrid.GetGridGroup(GridLinkTypeEnum.Mechanical) == gridGroup)
-                        continue;
-
-                    Vector3D? targetVelocity = (hitGrid != null) ? hitGrid.Physics.LinearVelocity : (Vector3D?)null;
-                    Vector3D targetCenter = (hitGrid != null) ? hitGrid.Physics.CenterOfMassWorld : hitInfo.Position;
-
-                    double? timeToCollision = CalculateTimeToCollision(
-                        gridCenter, myVelocity,
-                        targetCenter, targetVelocity);
-
-                    if (!timeToCollision.HasValue) continue;
-
-                    if (timeToCollision.Value < closestCollisionTime)
-                    {
-                        closestCollisionTime = timeToCollision.Value;
-                        double threatLevel = CalculateThreatLevel(timeToCollision.Value, myVelocity, targetVelocity);
-
-                        closestCollisionTarget = new CollisionTarget
-                        {
-                            Entity = hitInfo.HitEntity,
-                            Position = targetCenter,
-                            Velocity = targetVelocity,
-                            TimeToCollision = timeToCollision.Value,
-                            ThreatLevel = threatLevel
-                        };
-                    }
-                }
-            }
-        }
-
-        return closestCollisionTarget;
     }
     private void UpdateTopThreats()
     {
@@ -231,7 +183,9 @@ public class CollisionPredictor : MySessionComponentBase
 
             target.ThreatLevel *= ThreatLevelDecayRate;
 
-            if (target.LastSeenCounter > TargetMemoryDuration || target.ThreatLevel < MinimumThreatLevelToTrack)
+            if (target.LastSeenCounter > TargetMemoryDuration ||
+                target.ThreatLevel < MinimumThreatLevelToTrack ||
+                Vector3D.Distance(target.LastPosition, MyAPIGateway.Session.Player.GetPosition()) > MaxRange)
             {
                 targetsToRemove.Add(kvp.Key);
             }

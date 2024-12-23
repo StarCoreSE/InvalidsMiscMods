@@ -1,4 +1,5 @@
-﻿using Sandbox.Game.Entities;
+﻿using Sandbox.Engine.Utils;
+using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
@@ -60,6 +61,81 @@ public class CollisionPredictor : MySessionComponentBase
         public bool IsCurrentThreat;
     }
 
+    public class CollisionConfig
+    {
+        public bool Debug { get; set; } = false;
+        public float MinSpeed { get; set; } = 2f;
+        public float MaxRange { get; set; } = 1000f;
+        public double VoxelRayRange { get; set; } = 20000;
+        public int NotificationInterval { get; set; } = 60;
+        public int MaxTrackedTargets { get; set; } = 100;
+        public float MinimumThreatLevelToTrack { get; set; } = 0.1f;
+        public bool ShowDebugSpheres { get; set; } = true;
+        public float DebugSphereSize { get; set; } = 2f;
+    }
+
+    private CollisionConfig config;
+    private const string CONFIG_FILE = "CollisionPredictorConfig.xml";
+
+    public override void LoadData()
+    {
+        LoadConfig();
+        MyAPIGateway.Utilities.MessageEntered += HandleMessage;
+    }
+
+    private void HandleMessage(string messageText, ref bool sendToOthers)
+    {
+        if (messageText.Equals("/colldebug", StringComparison.OrdinalIgnoreCase))
+        {
+            config.Debug = !config.Debug;
+            SaveConfig();
+            MyAPIGateway.Utilities.ShowNotification($"Collision Predictor Debug Mode: {(config.Debug ? "ON" : "OFF")}", 2000);
+            sendToOthers = false;
+        }
+    }
+
+    private void LoadConfig()
+    {
+        try
+        {
+            if (MyAPIGateway.Utilities.FileExistsInWorldStorage(CONFIG_FILE, typeof(CollisionPredictor)))
+            {
+                var textReader = MyAPIGateway.Utilities.ReadFileInWorldStorage(CONFIG_FILE, typeof(CollisionPredictor));
+                var configText = textReader.ReadToEnd();
+                config = MyAPIGateway.Utilities.SerializeFromXML<CollisionConfig>(configText);
+                MyLog.Default.WriteLine($"CollisionPredictor: Loaded config from file");
+            }
+            else
+            {
+                config = new CollisionConfig();
+                SaveConfig();
+                MyLog.Default.WriteLine($"CollisionPredictor: Created new config file");
+            }
+        }
+        catch (Exception e)
+        {
+            MyLog.Default.WriteLine($"CollisionPredictor: Error loading config: {e}");
+            config = new CollisionConfig();
+        }
+    }
+
+
+    private void SaveConfig()
+    {
+        try
+        {
+            string xml = MyAPIGateway.Utilities.SerializeToXML(config);
+            var textWriter = MyAPIGateway.Utilities.WriteFileInWorldStorage(CONFIG_FILE, typeof(CollisionPredictor));
+            textWriter.Write(xml);
+            textWriter.Flush();
+            MyLog.Default.WriteLine($"CollisionPredictor: Saved config to file");
+        }
+        catch (Exception e)
+        {
+            MyLog.Default.WriteLine($"CollisionPredictor: Error saving config: {e}");
+        }
+    }
+
     public override void UpdateBeforeSimulation()
     {
         if (MyAPIGateway.Utilities.IsDedicated && MyAPIGateway.Session.IsServer)
@@ -82,7 +158,7 @@ public class CollisionPredictor : MySessionComponentBase
         var myVelocity = grid.Physics.LinearVelocity;
         var mySpeed = myVelocity.Length();
 
-        if (mySpeed < MinSpeed) return;
+        if (mySpeed < config.MinSpeed) return;
 
         var gridCenter = grid.Physics.CenterOfMassWorld;
 
@@ -98,6 +174,11 @@ public class CollisionPredictor : MySessionComponentBase
     {
         try
         {
+            if (config.Debug)
+            {
+                MyLog.Default.WriteLine($"CollisionPredictor: Starting collision scan for grid {myGrid.DisplayName}");
+            }
+
             var visibleEntities = new HashSet<IMyEntity>();
             MyAPIGateway.Entities.GetEntities(null, (entity) =>
             {
@@ -108,7 +189,10 @@ public class CollisionPredictor : MySessionComponentBase
                 return false;
             });
 
-            MyLog.Default.WriteLine($"CollisionPredictor: Found {visibleEntities.Count} visible entities");
+            if (config.Debug)
+            {
+                MyLog.Default.WriteLine($"CollisionPredictor: Found {visibleEntities.Count} potential targets");
+            }
 
             foreach (var entity in visibleEntities)
             {
@@ -116,19 +200,27 @@ public class CollisionPredictor : MySessionComponentBase
                 {
                     if (entity == null)
                     {
-                        MyLog.Default.WriteLine("CollisionPredictor: Encountered null entity");
+                        if (config.Debug)
+                        {
+                            MyLog.Default.WriteLine("CollisionPredictor: Encountered null entity");
+                        }
+
                         continue;
                     }
 
                     var targetGrid = entity as IMyCubeGrid;
                     if (targetGrid == null)
                     {
-                        MyLog.Default.WriteLine($"CollisionPredictor: Entity {entity.EntityId} is not a grid");
+                        if (config.Debug)
+                        {
+                            MyLog.Default.WriteLine($"CollisionPredictor: Entity {entity.EntityId} is not a grid");
+                        }
                         continue;
                     }
 
                     if (targetGrid.Physics == null)
                     {
+
                         MyLog.Default.WriteLine($"CollisionPredictor: Grid {targetGrid.EntityId} has null physics");
                         continue;
                     }
@@ -379,12 +471,22 @@ public class CollisionPredictor : MySessionComponentBase
         voxelHazards.Clear();
         Vector3D mainDirection = Vector3D.Normalize(velocityDirection);
 
+        if (config.Debug)
+        {
+            MyLog.Default.WriteLine($"CollisionPredictor: Starting voxel hazard scan from {gridCenter} with speed {speed}");
+        }
+
         // Create a cone of rays around the velocity vector
         for (int i = 0; i < VoxelRayCount; i++)
         {
             Vector3D rayDirection = GetRandomDirectionInCone(mainDirection, (float)VoxelScanSpread);
             Vector3D rayEnd = gridCenter + (rayDirection * VoxelRayRange);
             LineD ray = new LineD(gridCenter, rayEnd);
+
+            if (config.Debug)
+            {
+                MyLog.Default.WriteLine($"CollisionPredictor: Scanning ray {i} from {gridCenter} to {rayEnd}");
+            }
 
             List<MyLineSegmentOverlapResult<MyVoxelBase>> voxelHits = new List<MyLineSegmentOverlapResult<MyVoxelBase>>();
             MyGamePruningStructure.GetVoxelMapsOverlappingRay(ref ray, voxelHits);
@@ -399,6 +501,11 @@ public class CollisionPredictor : MySessionComponentBase
                     double distance = Vector3D.Distance(gridCenter, intersection.Value);
                     double timeToCollision = distance / Math.Max(speed, 0.1); // Avoid division by zero
 
+                    if (config.Debug)
+                    {
+                        MyLog.Default.WriteLine($"CollisionPredictor: Detected voxel hazard at {intersection.Value} with time to collision {timeToCollision}");
+                    }
+
                     // Only store if it's a potential threat
                     if (timeToCollision < VoxelRayRange / speed)
                     {
@@ -410,14 +517,19 @@ public class CollisionPredictor : MySessionComponentBase
     }
     private double CalculateThreatLevel(double timeToCollision, Vector3D myVelocity, Vector3D? targetVelocity)
     {
-        // Relative speed squared, as kinetic energy is proportional to v^2
         double relativeSpeed = targetVelocity.HasValue
             ? (myVelocity - targetVelocity.Value).LengthSquared()
             : myVelocity.LengthSquared();
 
-        // Apply weighting for time to collision to scale the threat level logarithmically
         double timeFactor = 1.0 / (timeToCollision + 0.5); // Add offset to avoid division by zero
-        return relativeSpeed * timeFactor;
+        double threatLevel = relativeSpeed * timeFactor;
+
+        if (config.Debug)
+        {
+            MyLog.Default.WriteLine($"CollisionPredictor: Calculated threat level {threatLevel} for time to collision {timeToCollision}");
+        }
+
+        return threatLevel;
     }
     private double? CalculateTimeToCollision(Vector3D myPosition, Vector3D myVelocity,
         Vector3D targetPosition, Vector3D? targetVelocity)
@@ -428,26 +540,49 @@ public class CollisionPredictor : MySessionComponentBase
 
         double relativeSpeed = relativeVelocity.Length();
         if (relativeSpeed < 1)
+        {
+            if (config.Debug)
+            {
+                MyLog.Default.WriteLine($"CollisionPredictor: Relative speed {relativeSpeed} is too low for collision calculation");
+            }
             return null;
+        }
 
         double dot = Vector3D.Dot(relativePosition, relativeVelocity);
         if (dot < 0)
+        {
+            if (config.Debug)
+            {
+                MyLog.Default.WriteLine($"CollisionPredictor: Negative dot product {dot}, no collision expected");
+            }
             return null;
+        }
 
-        return dot / (relativeSpeed * relativeSpeed);
+        double timeToCollision = dot / (relativeSpeed * relativeSpeed);
+
+        if (config.Debug)
+        {
+            MyLog.Default.WriteLine($"CollisionPredictor: Calculated time to collision {timeToCollision}");
+        }
+
+        return timeToCollision;
     }
     private Color GetWarningColor(double timeToCollision, double threatLevel)
     {
-        // Normalize time-to-collision (nearer threats are more red)
         float normalizedTime = 1f - (float)Math.Min(timeToCollision / MaxRange, 1.0);
-
-        // Normalize threat level with an exponential factor for more gradation
         float normalizedThreat = (float)Math.Min(Math.Pow(threatLevel / 100.0, 0.5), 1.0);
 
-        return new Color(
+        Color color = new Color(
             (byte)(255 * normalizedThreat),  // Red increases with threat
             (byte)(255 * (1.0 - normalizedThreat) * normalizedTime),  // Green diminishes closer to impact
             0); // Blue remains 0 for pure warning colors
+
+        if (config.Debug)
+        {
+            MyLog.Default.WriteLine($"CollisionPredictor: Generated warning color {color} for time to collision {timeToCollision} and threat level {threatLevel}");
+        }
+
+        return color;
     }
     private Vector3D GetRandomDirectionInCone(Vector3D mainDirection, float coneAngle)
     {
@@ -462,18 +597,47 @@ public class CollisionPredictor : MySessionComponentBase
         double y = Math.Sin(randomAngle) * Math.Sin(randomAzimuth);
         double z = Math.Cos(randomAngle);
 
-        return Vector3D.Normalize(z * mainDirection + x * perp1 + y * perp2);
+        Vector3D direction = Vector3D.Normalize(z * mainDirection + x * perp1 + y * perp2);
+
+        if (config.Debug)
+        {
+            MyLog.Default.WriteLine($"CollisionPredictor: Generated random direction {direction} in cone around {mainDirection} with angle {coneAngle}");
+        }
+
+        return direction;
     }
     private void DrawLine(Vector3D start, Vector3D end, Color color)
     {
         var color1 = color.ToVector4();
         MySimpleObjectDraw.DrawLine(start, end, MyStringId.GetOrCompute("Square"), ref color1, 0.2f);
+
+        if (config.Debug)
+        {
+            MyLog.Default.WriteLine($"CollisionPredictor: Drew line from {start} to {end} with color {color}");
+        }
     }
     private void DrawDebugSphere(Vector3D position, float radius, Color color)
     {
         var matrix = MatrixD.CreateTranslation(position);
         Color color1 = color.ToVector4();
         MySimpleObjectDraw.DrawTransparentSphere(ref matrix, radius, ref color1, (MySimpleObjectRasterizer)0.5f, 32, MyStringId.GetOrCompute("Square"));
+
+        if (config.Debug)
+        {
+            MyLog.Default.WriteLine($"CollisionPredictor: Drew debug sphere at {position} with radius {radius} and color {color}");
+        }
     }
-    protected override void UnloadData() { }
+    protected override void UnloadData()
+    {
+        try
+        {
+            SaveConfig();
+            MyAPIGateway.Utilities.MessageEntered -= HandleMessage;
+        }
+        catch (Exception e)
+        {
+            MyLog.Default.WriteLine($"CollisionPredictor: Error in UnloadData: {e}");
+        }
+    }
+
 }

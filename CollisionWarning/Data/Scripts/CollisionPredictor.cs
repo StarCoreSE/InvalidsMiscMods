@@ -14,7 +14,7 @@ using IMyCockpit = Sandbox.ModAPI.Ingame.IMyCockpit;
 [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
 public class CollisionPredictor : MySessionComponentBase
 {
-    private const float MinSpeed = 2f;
+    private const float MinSpeed = 20f;
     private const float MaxRange = 1000f;
     private const double VoxelRayRange = 20000; // Fixed view distance in meters, adjust as needed
     private const int NotificationInterval = 60;
@@ -34,9 +34,9 @@ public class CollisionPredictor : MySessionComponentBase
     private int updateCounter = 0;
     private Random random = new Random();
 
-    private const int VoxelScanInterval = 60; // How often to scan for voxels (every 60 frames)
-    private const double VoxelScanSpread = 15.0; // Degrees spread around velocity vector
-    private const int VoxelRayCount = 8; // Number of rays to cast for voxel detection
+    private const double VoxelScanSpread = 1.0; // Reduced to 1 degree spread
+    private const int VoxelRayCount = 3; // Reduced ray count since we're more focused
+    private const int VoxelScanInterval = 30; // Can scan more often with fewer rays
     private Dictionary<Vector3D, double> voxelHazards = new Dictionary<Vector3D, double>(); // Store detected voxel collision points
     private int voxelScanCounter = 0;
 
@@ -321,7 +321,7 @@ public class CollisionPredictor : MySessionComponentBase
                 {
                     message += $" | +{trackedTargets.Count} threats";
                 }
-                MyAPIGateway.Utilities.ShowNotification(message, 1000, MyFontEnum.Red);
+                MyAPIGateway.Utilities.ShowNotification(message, 950, MyFontEnum.Red);
             }
             else if (highestThreat != null)
             {
@@ -338,7 +338,7 @@ public class CollisionPredictor : MySessionComponentBase
                     message = $"COLLISION WARNING [{gridName}]: {highestThreat.LastTimeToCollision:F1}s";
                 }
 
-                MyAPIGateway.Utilities.ShowNotification(message, 1000, MyFontEnum.Red);
+                MyAPIGateway.Utilities.ShowNotification(message, 950, MyFontEnum.Red);
             }
         }
     }

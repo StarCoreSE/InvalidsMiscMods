@@ -12,12 +12,16 @@ using VRage.Utils;
 [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
 public class CollisionPredictor : MySessionComponentBase
 {
-    private const float MinSpeed = 2f;
+    private const float MinSpeed = 20f;
     private const float MaxRange = 1000f;
     private const float ConeAngle = 30f;
-    private int updateCounter = 0;
     private const int NotificationInterval = 60;
+
+    private int updateCounter = 0;
     private Random random = new Random();
+    private IMyEntity currentCollisionTarget = null;
+    private Vector3D currentCollisionPoint;
+    private double currentTimeToCollision;
 
     private class CollisionTarget
     {
@@ -69,29 +73,26 @@ public class CollisionPredictor : MySessionComponentBase
             {
                 if (hitInfo.HitEntity == null) continue;
 
-                // Check if the hit entity is part of our grid group
                 var hitGrid = hitInfo.HitEntity as IMyCubeGrid;
                 if (hitGrid != null && hitGrid.GetGridGroup(GridLinkTypeEnum.Mechanical) == gridGroup)
                     continue;
 
-                // Get target velocity if it's a grid
-                Vector3D? targetVelocity = null;
-                if (hitGrid != null)
-                {
-                    targetVelocity = hitGrid.Physics.LinearVelocity;
-                }
+                Vector3D? targetVelocity = (hitGrid != null) ? hitGrid.Physics.LinearVelocity : (Vector3D?)null;
+                Vector3D targetCenter = (hitGrid != null) ? hitGrid.Physics.CenterOfMassWorld : hitInfo.Position;
 
                 double? timeToCollision = CalculateTimeToCollision(
                     gridCenter, myVelocity,
-                    hitInfo.Position, targetVelocity);
+                    targetCenter, targetVelocity);
 
-                if (timeToCollision.HasValue && timeToCollision.Value < closestCollisionTime)
+                if (!timeToCollision.HasValue) continue;
+
+                if (timeToCollision.Value < closestCollisionTime)
                 {
                     closestCollisionTime = timeToCollision.Value;
                     closestCollisionTarget = new CollisionTarget
                     {
                         Entity = hitInfo.HitEntity,
-                        Position = hitInfo.Position,
+                        Position = targetCenter,
                         Velocity = targetVelocity,
                         TimeToCollision = timeToCollision.Value
                     };
@@ -119,7 +120,7 @@ public class CollisionPredictor : MySessionComponentBase
     }
 
     private double? CalculateTimeToCollision(Vector3D myPosition, Vector3D myVelocity,
-                                            Vector3D targetPosition, Vector3D? targetVelocity)
+        Vector3D targetPosition, Vector3D? targetVelocity)
     {
         Vector3D relativePosition = targetPosition - myPosition;
         Vector3D relativeVelocity = targetVelocity.HasValue ?

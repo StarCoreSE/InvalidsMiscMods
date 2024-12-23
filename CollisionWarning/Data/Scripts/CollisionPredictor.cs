@@ -12,12 +12,20 @@ using VRage.Utils;
 [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
 public class CollisionPredictor : MySessionComponentBase
 {
-    private const float MinSpeed = 20f;
+    private const float MinSpeed = 2f;
     private const float MaxRange = 1000f;
     private const float ConeAngle = 30f;
     private int updateCounter = 0;
     private const int NotificationInterval = 60;
     private Random random = new Random();
+
+    private class CollisionTarget
+    {
+        public IMyEntity Entity;
+        public Vector3D Position;
+        public Vector3D? Velocity;
+        public double TimeToCollision;
+    }
 
     public override void UpdateBeforeSimulation()
     {
@@ -35,55 +43,107 @@ public class CollisionPredictor : MySessionComponentBase
         if (grid == null)
             return;
 
-        var velocity = grid.Physics.LinearVelocity;
-        var speed = velocity.Length();
+        var myVelocity = grid.Physics.LinearVelocity;
+        var mySpeed = myVelocity.Length();
 
-        if (updateCounter % NotificationInterval == 0)
-            MyAPIGateway.Utilities.ShowNotification($"Debug: Current speed: {speed:F1} m/s", 1000,
-                speed >= MinSpeed ? MyFontEnum.Green : MyFontEnum.White);
+        if (mySpeed < MinSpeed) return;
 
-        if (speed < MinSpeed) return;
-
-        var mainDirection = Vector3D.Normalize(velocity);
+        var mainDirection = Vector3D.Normalize(myVelocity);
         var gridGroup = grid.GetGridGroup(GridLinkTypeEnum.Mechanical);
+        var gridCenter = grid.Physics.CenterOfMassWorld;
 
-        // Get bounding box corners
         BoundingBoxD box = grid.WorldAABB;
         Vector3D[] corners = new Vector3D[8];
         box.GetCorners(corners);
+
+        CollisionTarget closestCollisionTarget = null;
+        double closestCollisionTime = double.MaxValue;
 
         foreach (Vector3D corner in corners)
         {
             Vector3D rayDirection = GetRandomDirectionInCone(mainDirection);
             Vector3D rayEnd = corner + rayDirection * MaxRange;
 
-            // Draw the ray
-            DrawLine(corner, rayEnd, Color.Blue);
-
             IHitInfo hitInfo;
             if (MyAPIGateway.Physics.CastLongRay(corner, rayEnd, out hitInfo, false))
             {
-                if (hitInfo.HitEntity != null)
-                {
-                    // Check if the hit entity is part of our grid group
-                    var hitGrid = hitInfo.HitEntity as IMyCubeGrid;
-                    if (hitGrid != null && hitGrid.GetGridGroup(GridLinkTypeEnum.Mechanical) == gridGroup)
-                        continue;
+                if (hitInfo.HitEntity == null) continue;
 
-                    string entityName = hitInfo.HitEntity.DisplayName ?? "Unknown Entity";
-                    if (updateCounter % NotificationInterval == 0)
-                        MyAPIGateway.Utilities.ShowNotification($"Hit: {entityName}", 1000, MyFontEnum.White);
-                    DrawThickLine(corner, hitInfo.Position, Color.Yellow);
-                }
-                else
+                // Check if the hit entity is part of our grid group
+                var hitGrid = hitInfo.HitEntity as IMyCubeGrid;
+                if (hitGrid != null && hitGrid.GetGridGroup(GridLinkTypeEnum.Mechanical) == gridGroup)
+                    continue;
+
+                // Get target velocity if it's a grid
+                Vector3D? targetVelocity = null;
+                if (hitGrid != null)
                 {
-                    if (updateCounter % NotificationInterval == 0)
-                        MyAPIGateway.Utilities.ShowNotification("Hit: Voxel", 1000, MyFontEnum.White);
-                    Color voxelColor = IsOnCollisionCourse(corner, velocity, hitInfo.Position) ? Color.Red : Color.White;
-                    DrawThickLine(corner, hitInfo.Position, voxelColor);
+                    targetVelocity = hitGrid.Physics.LinearVelocity;
+                }
+
+                double? timeToCollision = CalculateTimeToCollision(
+                    gridCenter, myVelocity,
+                    hitInfo.Position, targetVelocity);
+
+                if (timeToCollision.HasValue && timeToCollision.Value < closestCollisionTime)
+                {
+                    closestCollisionTime = timeToCollision.Value;
+                    closestCollisionTarget = new CollisionTarget
+                    {
+                        Entity = hitInfo.HitEntity,
+                        Position = hitInfo.Position,
+                        Velocity = targetVelocity,
+                        TimeToCollision = timeToCollision.Value
+                    };
                 }
             }
         }
+
+        // Draw collision warning if we found a potential collision
+        if (closestCollisionTarget != null && closestCollisionTarget.TimeToCollision < MaxRange / mySpeed)
+        {
+            Color warningColor = GetWarningColor(closestCollisionTarget.TimeToCollision * mySpeed);
+            DrawThickLine(gridCenter, closestCollisionTarget.Position, warningColor);
+
+            if (updateCounter % NotificationInterval == 0)
+            {
+                string entityName = closestCollisionTarget.Entity?.DisplayName ?? "Unknown Entity";
+                string relativeSpeed = closestCollisionTarget.Velocity.HasValue ?
+                    $", Relative Speed: {(myVelocity - closestCollisionTarget.Velocity.Value).Length():F1} m/s" : "";
+
+                MyAPIGateway.Utilities.ShowNotification(
+                    $"Warning: Potential collision with {entityName} in {closestCollisionTarget.TimeToCollision:F1}s{relativeSpeed}",
+                    1000, MyFontEnum.Red);
+            }
+        }
+    }
+
+    private double? CalculateTimeToCollision(Vector3D myPosition, Vector3D myVelocity,
+                                            Vector3D targetPosition, Vector3D? targetVelocity)
+    {
+        Vector3D relativePosition = targetPosition - myPosition;
+        Vector3D relativeVelocity = targetVelocity.HasValue ?
+            myVelocity - targetVelocity.Value : myVelocity;
+
+        double relativeSpeed = relativeVelocity.Length();
+        if (relativeSpeed < 1) // Effectively stationary relative to each other
+            return null;
+
+        // Project relative position onto relative velocity
+        double dot = Vector3D.Dot(relativePosition, relativeVelocity);
+        if (dot < 0) // Moving away from each other
+            return null;
+
+        return dot / (relativeSpeed * relativeSpeed);
+    }
+
+    private Color GetWarningColor(double distance)
+    {
+        float normalizedDistance = (float)(Math.Min(Math.Max(distance, 0), MaxRange) / MaxRange);
+        return new Color(
+            (byte)(255 * (1 - normalizedDistance)),
+            (byte)(255 * normalizedDistance),
+            0);
     }
 
     private Vector3D GetRandomDirectionInCone(Vector3D mainDirection)

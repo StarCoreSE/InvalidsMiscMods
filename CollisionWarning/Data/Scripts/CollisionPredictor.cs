@@ -12,7 +12,7 @@ using VRage.Utils;
 [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
 public class CollisionPredictor : MySessionComponentBase
 {
-    private const float MinSpeed = 20f;
+    private const float MinSpeed = 2f;
     private const float MaxRange = 1000f;
     private const float ConeAngle = 30f;
     private const int NotificationInterval = 60;

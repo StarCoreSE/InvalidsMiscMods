@@ -96,62 +96,142 @@ public class CollisionPredictor : MySessionComponentBase
     }
     private void ScanForCollisions(IMyCubeGrid myGrid, Vector3D gridCenter, Vector3D myVelocity)
     {
-        var visibleEntities = new HashSet<IMyEntity>();
-        MyAPIGateway.Entities.GetEntities(null, (entity) =>
+        try
         {
-            if (entity is IMyCubeGrid && entity != myGrid)
+            var visibleEntities = new HashSet<IMyEntity>();
+            MyAPIGateway.Entities.GetEntities(null, (entity) =>
             {
-                visibleEntities.Add(entity);
-            }
-            return false;
-        });
-
-        foreach (var entity in visibleEntities)
-        {
-            var targetGrid = entity as IMyCubeGrid;
-            if (targetGrid == null) continue;
-
-            Vector3D targetCenter = targetGrid.Physics.CenterOfMassWorld;
-            Vector3D targetVelocity = targetGrid.Physics.LinearVelocity;
-
-            // Check if the target is within a reasonable range
-            double distanceToTarget = Vector3D.Distance(gridCenter, targetCenter);
-            if (distanceToTarget > MaxRange) continue;
-
-            // Check if we're on a collision course
-            Vector3D relativePosition = targetCenter - gridCenter;
-            Vector3D relativeVelocity = targetVelocity - myVelocity;
-
-            // Calculate the time of closest approach
-            double timeToClosestApproach = -Vector3D.Dot(relativePosition, relativeVelocity) / relativeVelocity.LengthSquared();
-
-            // If the time is negative, we've already passed the closest point
-            if (timeToClosestApproach < 0) continue;
-
-            // Calculate the distance at closest approach
-            Vector3D positionAtClosestApproach = relativePosition + relativeVelocity * timeToClosestApproach;
-            double distanceAtClosestApproach = positionAtClosestApproach.Length();
-
-            // If the distance at closest approach is greater than the sum of the grids' bounding spheres, no collision
-            double collisionThreshold = myGrid.WorldVolume.Radius + targetGrid.WorldVolume.Radius;
-            if (distanceAtClosestApproach > collisionThreshold) continue;
-
-            // If we've made it this far, calculate the actual time to collision
-            double? timeToCollision = CalculateTimeToCollision(gridCenter, myVelocity, targetCenter, targetVelocity);
-
-            if (timeToCollision.HasValue)
-            {
-                double threatLevel = CalculateThreatLevel(timeToCollision.Value, myVelocity, targetVelocity);
-
-                UpdateTargetTracking(new CollisionTarget
+                if (entity is IMyCubeGrid && entity != myGrid)
                 {
-                    Entity = targetGrid,
-                    Position = targetCenter,
-                    Velocity = targetVelocity,
-                    TimeToCollision = timeToCollision.Value,
-                    ThreatLevel = threatLevel
-                });
+                    visibleEntities.Add(entity);
+                }
+                return false;
+            });
+
+            MyLog.Default.WriteLine($"CollisionPredictor: Found {visibleEntities.Count} visible entities");
+
+            foreach (var entity in visibleEntities)
+            {
+                try
+                {
+                    if (entity == null)
+                    {
+                        MyLog.Default.WriteLine("CollisionPredictor: Encountered null entity");
+                        continue;
+                    }
+
+                    var targetGrid = entity as IMyCubeGrid;
+                    if (targetGrid == null)
+                    {
+                        MyLog.Default.WriteLine($"CollisionPredictor: Entity {entity.EntityId} is not a grid");
+                        continue;
+                    }
+
+                    if (targetGrid.Physics == null)
+                    {
+                        MyLog.Default.WriteLine($"CollisionPredictor: Grid {targetGrid.EntityId} has null physics");
+                        continue;
+                    }
+
+                    // Safely get target properties
+                    Vector3D targetCenter;
+                    Vector3D targetVelocity;
+
+                    try
+                    {
+                        targetCenter = targetGrid.Physics.CenterOfMassWorld;
+                        targetVelocity = targetGrid.Physics.LinearVelocity;
+                    }
+                    catch (Exception e)
+                    {
+                        MyLog.Default.WriteLine($"CollisionPredictor: Error getting physics properties for grid {targetGrid.EntityId}: {e.Message}");
+                        continue;
+                    }
+
+                    // Check if the target is within a reasonable range
+                    double distanceToTarget = Vector3D.Distance(gridCenter, targetCenter);
+                    if (distanceToTarget > MaxRange)
+                    {
+                        MyLog.Default.WriteLine($"CollisionPredictor: Grid {targetGrid.EntityId} is out of range");
+                        continue;
+                    }
+
+                    // Rest of your collision detection logic
+                    Vector3D relativePosition = targetCenter - gridCenter;
+                    Vector3D relativeVelocity = targetVelocity - myVelocity;
+
+                    // Safely check for zero velocity
+                    if (relativeVelocity.LengthSquared() < 0.0001)
+                    {
+                        MyLog.Default.WriteLine($"CollisionPredictor: Grid {targetGrid.EntityId} has near-zero relative velocity");
+                        continue;
+                    }
+
+                    double timeToClosestApproach = -Vector3D.Dot(relativePosition, relativeVelocity) / relativeVelocity.LengthSquared();
+
+                    if (timeToClosestApproach < 0)
+                    {
+                        MyLog.Default.WriteLine($"CollisionPredictor: Grid {targetGrid.EntityId} has negative time to closest approach");
+                        continue;
+                    }
+
+                    Vector3D positionAtClosestApproach = relativePosition + relativeVelocity * timeToClosestApproach;
+                    double distanceAtClosestApproach = positionAtClosestApproach.Length();
+
+                    // Safely get bounding spheres
+                    double myRadius = 0;
+                    double targetRadius = 0;
+
+                    try
+                    {
+                        myRadius = myGrid.WorldVolume.Radius;
+                        targetRadius = targetGrid.WorldVolume.Radius;
+                    }
+                    catch (Exception e)
+                    {
+                        MyLog.Default.WriteLine($"CollisionPredictor: Error getting world volume for grid {targetGrid.EntityId}: {e.Message}");
+                        myRadius = 10;
+                        targetRadius = 10;
+                    }
+
+                    double collisionThreshold = myRadius + targetRadius;
+                    if (distanceAtClosestApproach > collisionThreshold)
+                    {
+                        MyLog.Default.WriteLine($"CollisionPredictor: Grid {targetGrid.EntityId} is not on collision course");
+                        continue;
+                    }
+
+                    double? timeToCollision = CalculateTimeToCollision(gridCenter, myVelocity, targetCenter, targetVelocity);
+
+                    if (timeToCollision.HasValue)
+                    {
+                        double threatLevel = CalculateThreatLevel(timeToCollision.Value, myVelocity, targetVelocity);
+
+                        UpdateTargetTracking(new CollisionTarget
+                        {
+                            Entity = targetGrid,
+                            Position = targetCenter,
+                            Velocity = targetVelocity,
+                            TimeToCollision = timeToCollision.Value,
+                            ThreatLevel = threatLevel
+                        });
+
+                        MyLog.Default.WriteLine($"CollisionPredictor: Added grid {targetGrid.EntityId} to tracked targets");
+                    }
+                    else
+                    {
+                        MyLog.Default.WriteLine($"CollisionPredictor: Could not calculate time to collision for grid {targetGrid.EntityId}");
+                    }
+                }
+                catch (Exception entityException)
+                {
+                    MyLog.Default.WriteLine($"CollisionPredictor: Error processing entity {entity?.EntityId}: {entityException.Message}");
+                }
             }
+        }
+        catch (Exception e)
+        {
+            MyLog.Default.WriteLine($"CollisionPredictor: Error in ScanForCollisions: {e.Message}");
         }
     }
     private void UpdateTopThreats()

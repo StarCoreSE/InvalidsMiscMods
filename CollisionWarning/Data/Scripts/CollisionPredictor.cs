@@ -1,5 +1,4 @@
-﻿using Sandbox.Engine.Utils;
-using Sandbox.Game.Entities;
+﻿using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
@@ -12,24 +11,17 @@ using VRage.Utils;
 using VRageMath;
 using IMyCockpit = Sandbox.ModAPI.Ingame.IMyCockpit;
 
+namespace CollisionPredictor
+{
+
 [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
 public class CollisionPredictor : MySessionComponentBase
 {
-    private const float MinSpeed = 2f;
-    private const float MaxRange = 1000f;
-    private const double VoxelRayRange = 20000; // Fixed view distance in meters, adjust as needed
-    private const int NotificationInterval = 60;
-    private const float BaseSearchAngle = 360f;
-    private const float MinSearchAngle = 30f;
-    private const float SpeedAngleReductionFactor = 0.5f;
-    private const int TargetMemoryDuration = 180;
-    private const float RaycastDensity = 0.1f; // Adjusts number of raycasts
+
+
 
     private const int MaxTrackedTargets = 100; // Maximum number of targets to track and display
     private const float MinimumThreatLevelToTrack = 0.1f; // Minimum threat level to consider tracking a target
-    private const float ThreatLevelDecayRate = 0.9f; // How quickly threat level decays per update
-    private const bool ShowDebugSpheres = true; // Toggle for showing prediction spheres
-    private const float DebugSphereSize = 2f; // Size of the debug spheres
 
     private Dictionary<long, StoredTarget> trackedTargets = new Dictionary<long, StoredTarget>();
     private int updateCounter = 0;
@@ -65,13 +57,15 @@ public class CollisionPredictor : MySessionComponentBase
     {
         public bool Debug { get; set; } = false;
         public float MinSpeed { get; set; } = 2f;
-        public float MaxRange { get; set; } = 1000f;
+        public float MaxGridRange { get; set; } = 1000f;
         public double VoxelRayRange { get; set; } = 20000;
         public int NotificationInterval { get; set; } = 60;
         public int MaxTrackedTargets { get; set; } = 100;
         public float MinimumThreatLevelToTrack { get; set; } = 0.1f;
         public bool ShowDebugSpheres { get; set; } = true;
         public float DebugSphereSize { get; set; } = 2f;
+        public int TargetMemoryDuration { get; set; } = 180;
+        public float ThreatLevelDecayRate { get; set; } = 0.9f;
     }
 
     private CollisionConfig config;
@@ -98,9 +92,9 @@ public class CollisionPredictor : MySessionComponentBase
     {
         try
         {
-            if (MyAPIGateway.Utilities.FileExistsInWorldStorage(CONFIG_FILE, typeof(CollisionPredictor)))
+            if (MyAPIGateway.Utilities.FileExistsInLocalStorage(CONFIG_FILE, typeof(CollisionPredictor)))
             {
-                var textReader = MyAPIGateway.Utilities.ReadFileInWorldStorage(CONFIG_FILE, typeof(CollisionPredictor));
+                var textReader = MyAPIGateway.Utilities.ReadFileInLocalStorage(CONFIG_FILE, typeof(CollisionPredictor));
                 var configText = textReader.ReadToEnd();
                 config = MyAPIGateway.Utilities.SerializeFromXML<CollisionConfig>(configText);
                 MyLog.Default.WriteLine($"CollisionPredictor: Loaded config from file");
@@ -125,7 +119,7 @@ public class CollisionPredictor : MySessionComponentBase
         try
         {
             string xml = MyAPIGateway.Utilities.SerializeToXML(config);
-            var textWriter = MyAPIGateway.Utilities.WriteFileInWorldStorage(CONFIG_FILE, typeof(CollisionPredictor));
+            var textWriter = MyAPIGateway.Utilities.WriteFileInLocalStorage(CONFIG_FILE, typeof(CollisionPredictor));
             textWriter.Write(xml);
             textWriter.Flush();
             MyLog.Default.WriteLine($"CollisionPredictor: Saved config to file");
@@ -242,7 +236,7 @@ public class CollisionPredictor : MySessionComponentBase
 
                     // Check if the target is within a reasonable range
                     double distanceToTarget = Vector3D.Distance(gridCenter, targetCenter);
-                    if (distanceToTarget > MaxRange)
+                    if (distanceToTarget > config.MaxGridRange)
                     {
                         MyLog.Default.WriteLine($"CollisionPredictor: Grid {targetGrid.EntityId} is out of range");
                         continue;
@@ -353,11 +347,11 @@ public class CollisionPredictor : MySessionComponentBase
             target.LastSeenCounter++;
             target.IsCurrentThreat = false;
 
-            target.ThreatLevel *= ThreatLevelDecayRate;
+            target.ThreatLevel *= config.ThreatLevelDecayRate;
 
-            if (target.LastSeenCounter > TargetMemoryDuration ||
-                target.ThreatLevel < MinimumThreatLevelToTrack ||
-                Vector3D.Distance(target.LastPosition, MyAPIGateway.Session.Player.GetPosition()) > MaxRange)
+            if (target.LastSeenCounter > config.TargetMemoryDuration ||
+                target.ThreatLevel < config.MinimumThreatLevelToTrack ||
+                Vector3D.Distance(target.LastPosition, MyAPIGateway.Session.Player.GetPosition()) > config.MaxGridRange)
             {
                 targetsToRemove.Add(kvp.Key);
             }
@@ -388,52 +382,47 @@ public class CollisionPredictor : MySessionComponentBase
         storedTarget.ThreatLevel = newTarget.ThreatLevel;
         storedTarget.IsCurrentThreat = true;
     }
-    private void DisplayWarnings(Vector3D gridCenter, double mySpeed)  // Added mySpeed parameter
+    private void DisplayWarnings(Vector3D gridCenter, double mySpeed)
     {
         var sortedThreats = trackedTargets.Values
-            .Where(t => t.IsCurrentThreat && t.ThreatLevel >= MinimumThreatLevelToTrack)
+            .Where(t => t.IsCurrentThreat && t.ThreatLevel >= config.MinimumThreatLevelToTrack)
             .OrderByDescending(t => t.ThreatLevel)
-            .Take(MaxTrackedTargets);
+            .Take(config.MaxTrackedTargets);
 
-        // Visual warnings (lines and spheres)
         foreach (var target in sortedThreats)
         {
             Color warningColor = GetWarningColor(target.LastTimeToCollision, target.ThreatLevel);
             DrawLine(gridCenter, target.LastPosition, warningColor);
 
-            if (ShowDebugSpheres)
+            if (config.ShowDebugSpheres)
             {
-                DrawDebugSphere(target.LastPosition, DebugSphereSize, warningColor);
+                DrawDebugSphere(target.LastPosition, config.DebugSphereSize, warningColor);
 
                 if (target.LastVelocity.HasValue)
                 {
                     Vector3D predictedPos = target.LastPosition +
                                             target.LastVelocity.Value * target.LastTimeToCollision;
-                    DrawDebugSphere(predictedPos, DebugSphereSize * 0.5f, Color.Yellow);
+                    DrawDebugSphere(predictedPos, config.DebugSphereSize * 0.5f, Color.Yellow);
                 }
             }
         }
 
-        // Display voxel hazards
         foreach (var hazard in voxelHazards)
         {
             Color hazardColor = GetWarningColor(hazard.Value, hazard.Value * mySpeed);
             DrawLine(gridCenter, hazard.Key, hazardColor);
 
-            if (ShowDebugSpheres)
+            if (config.ShowDebugSpheres)
             {
-                DrawDebugSphere(hazard.Key, DebugSphereSize * 2f, hazardColor); // Larger sphere for voxel impacts
+                DrawDebugSphere(hazard.Key, config.DebugSphereSize * 2f, hazardColor);
             }
         }
 
-        // Text notification
-        if (updateCounter % NotificationInterval == 0)
+        if (updateCounter % config.NotificationInterval == 0)
         {
-            // Check for closest voxel hazard
             var closestVoxelHazard = voxelHazards.OrderBy(h => h.Value).FirstOrDefault();
             var highestThreat = sortedThreats.FirstOrDefault();
 
-            // Determine which warning to show based on which is closer
             if (closestVoxelHazard.Value > 0 &&
                 (highestThreat == null || closestVoxelHazard.Value < highestThreat.LastTimeToCollision))
             {
@@ -476,11 +465,10 @@ public class CollisionPredictor : MySessionComponentBase
             MyLog.Default.WriteLine($"CollisionPredictor: Starting voxel hazard scan from {gridCenter} with speed {speed}");
         }
 
-        // Create a cone of rays around the velocity vector
         for (int i = 0; i < VoxelRayCount; i++)
         {
             Vector3D rayDirection = GetRandomDirectionInCone(mainDirection, (float)VoxelScanSpread);
-            Vector3D rayEnd = gridCenter + (rayDirection * VoxelRayRange);
+            Vector3D rayEnd = gridCenter + (rayDirection * config.VoxelRayRange);
             LineD ray = new LineD(gridCenter, rayEnd);
 
             if (config.Debug)
@@ -499,15 +487,14 @@ public class CollisionPredictor : MySessionComponentBase
                 if (intersection.HasValue)
                 {
                     double distance = Vector3D.Distance(gridCenter, intersection.Value);
-                    double timeToCollision = distance / Math.Max(speed, 0.1); // Avoid division by zero
+                    double timeToCollision = distance / Math.Max(speed, 0.1);
 
                     if (config.Debug)
                     {
                         MyLog.Default.WriteLine($"CollisionPredictor: Detected voxel hazard at {intersection.Value} with time to collision {timeToCollision}");
                     }
 
-                    // Only store if it's a potential threat
-                    if (timeToCollision < VoxelRayRange / speed)
+                    if (timeToCollision < config.VoxelRayRange / speed)
                     {
                         voxelHazards[intersection.Value] = timeToCollision;
                     }
@@ -569,7 +556,7 @@ public class CollisionPredictor : MySessionComponentBase
     }
     private Color GetWarningColor(double timeToCollision, double threatLevel)
     {
-        float normalizedTime = 1f - (float)Math.Min(timeToCollision / MaxRange, 1.0);
+        float normalizedTime = 1f - (float)Math.Min(timeToCollision / config.MaxGridRange, 1.0);
         float normalizedThreat = (float)Math.Min(Math.Pow(threatLevel / 100.0, 0.5), 1.0);
 
         Color color = new Color(
@@ -639,5 +626,7 @@ public class CollisionPredictor : MySessionComponentBase
             MyLog.Default.WriteLine($"CollisionPredictor: Error in UnloadData: {e}");
         }
     }
+
+}
 
 }

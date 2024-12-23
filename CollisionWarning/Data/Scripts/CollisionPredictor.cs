@@ -92,9 +92,9 @@ public class CollisionPredictor : MySessionComponentBase
     {
         try
         {
-            if (MyAPIGateway.Utilities.FileExistsInLocalStorage(CONFIG_FILE, typeof(CollisionPredictor)))
+            if (MyAPIGateway.Utilities.FileExistsInGlobalStorage(CONFIG_FILE))
             {
-                var textReader = MyAPIGateway.Utilities.ReadFileInLocalStorage(CONFIG_FILE, typeof(CollisionPredictor));
+                var textReader = MyAPIGateway.Utilities.ReadFileInGlobalStorage(CONFIG_FILE);
                 var configText = textReader.ReadToEnd();
                 config = MyAPIGateway.Utilities.SerializeFromXML<CollisionConfig>(configText);
                 MyLog.Default.WriteLine($"CollisionPredictor: Loaded config from file");
@@ -119,7 +119,7 @@ public class CollisionPredictor : MySessionComponentBase
         try
         {
             string xml = MyAPIGateway.Utilities.SerializeToXML(config);
-            var textWriter = MyAPIGateway.Utilities.WriteFileInLocalStorage(CONFIG_FILE, typeof(CollisionPredictor));
+            var textWriter = MyAPIGateway.Utilities.WriteFileInGlobalStorage(CONFIG_FILE);
             textWriter.Write(xml);
             textWriter.Flush();
             MyLog.Default.WriteLine($"CollisionPredictor: Saved config to file");

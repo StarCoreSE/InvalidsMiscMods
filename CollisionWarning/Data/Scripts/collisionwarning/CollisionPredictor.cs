@@ -335,19 +335,19 @@ namespace CollisionPredictor
             var myVelocity = grid.Physics.LinearVelocity;
             var mySpeed = myVelocity.Length();
 
-            if (mySpeed < config.MinSpeed) return;
+            //if (mySpeed < config.MinSpeed) return;
 
             var gridCenter = grid.Physics.CenterOfMassWorld;
 
             UpdateTrackedTargets();
 
-            ScanForCollisions(grid, gridCenter, myVelocity);
+            ScanForCollisions(grid, gridCenter, myVelocity, mySpeed);
 
             ScanForVoxelHazards(gridCenter, myVelocity, mySpeed);
 
             DisplayWarnings(gridCenter, mySpeed);
         }
-        private void ScanForCollisions(IMyCubeGrid myGrid, Vector3D gridCenter, Vector3D myVelocity)
+        private void ScanForCollisions(IMyCubeGrid myGrid, Vector3D gridCenter, Vector3D myVelocity, double mySpeed)
         {
             try
             {
@@ -471,10 +471,9 @@ namespace CollisionPredictor
                         }
 
                         double? timeToCollision = CalculateTimeToCollision(gridCenter, myVelocity, targetCenter, targetVelocity);
-
                         if (timeToCollision.HasValue)
                         {
-                            double threatLevel = CalculateThreatLevel(timeToCollision.Value, myVelocity, targetVelocity);
+                            double threatLevel = CalculateThreatLevel(timeToCollision.Value, myVelocity, targetVelocity, mySpeed);
 
                             UpdateTargetTracking(new CollisionTarget
                             {
@@ -533,8 +532,7 @@ namespace CollisionPredictor
                 target.ThreatLevel *= config.ThreatLevelDecayRate;
 
                 if (target.LastSeenCounter > config.TargetMemoryDuration ||
-                    target.ThreatLevel < config.MinimumThreatLevelToTrack ||
-                    Vector3D.Distance(target.LastPosition, MyAPIGateway.Session.Player.GetPosition()) > config.MaxGridRange)
+                    (target.ThreatLevel < config.MinimumThreatLevelToTrack && Vector3D.Distance(target.LastPosition, MyAPIGateway.Session.Player.GetPosition()) > config.MaxGridRange))
                 {
                     targetsToRemove.Add(kvp.Key);
                 }
@@ -685,18 +683,22 @@ namespace CollisionPredictor
                 }
             }
         }
-        private double CalculateThreatLevel(double timeToCollision, Vector3D myVelocity, Vector3D? targetVelocity)
+        private double CalculateThreatLevel(double timeToCollision, Vector3D myVelocity, Vector3D? targetVelocity, double mySpeed)
         {
-            double relativeSpeed = targetVelocity.HasValue
-                ? (myVelocity - targetVelocity.Value).LengthSquared()
-                : myVelocity.LengthSquared();
+            Vector3D relativeVelocity = targetVelocity.HasValue ? myVelocity - targetVelocity.Value : myVelocity;
+            double relativeSpeed = relativeVelocity.Length();
 
-            double timeFactor = 1.0 / (timeToCollision + 0.5); // Add offset to avoid division by zero
-            double threatLevel = relativeSpeed * timeFactor;
+            // Consider the threat even if the player's grid is stationary
+            double effectiveSpeed = Math.Max(mySpeed, relativeSpeed);
+
+            double timeFactor = 1.0 / (timeToCollision + 0.5);
+            double distanceFactor = Math.Max(0, 1 - (timeToCollision * effectiveSpeed) / config.MaxGridRange);
+
+            double threatLevel = effectiveSpeed * timeFactor * distanceFactor;
 
             if (config.Debug)
             {
-                MyLog.Default.WriteLine($"CollisionPredictor: Calculated threat level {threatLevel} for time to collision {timeToCollision}");
+                MyLog.Default.WriteLine($"CollisionPredictor: Calculated threat level {threatLevel} for time to collision {timeToCollision}, relative speed {relativeSpeed}");
             }
 
             return threatLevel;

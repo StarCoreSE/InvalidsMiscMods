@@ -58,8 +58,9 @@ namespace CollisionPredictor
 
         public class CollisionConfig
         {
+            public bool Enabled { get; set; } = true;
             public bool Debug { get; set; } = false;
-            public float MinSpeed { get; set; } = 2f;
+            public float MinThreatSpeed { get; set; } = 2f;
             public float MaxGridRange { get; set; } = 1000f;
             public double VoxelRayRange { get; set; } = 20000;
             public int NotificationInterval { get; set; } = 60;
@@ -138,17 +139,23 @@ namespace CollisionPredictor
 
             switch (args[1].ToLower())
             {
+                case "on":
+                    SetEnabled(true);
+                    break;
+                case "off":
+                    SetEnabled(false);
+                    break;
                 case "help":
                     DisplayHelp();
                     break;
                 case "debug":
                     ToggleDebug();
                     break;
-                case "minspeed":
-                    float minSpeed;
-                    if (args.Length > 2 && float.TryParse(args[2], out minSpeed))
+                case "minthreatspeed":
+                    float minThreatSpeed;
+                    if (args.Length > 2 && float.TryParse(args[2], out minThreatSpeed))
                     {
-                        SetMinSpeed(minSpeed);
+                        SetMinThreatSpeed(minThreatSpeed);
                     }
                     break;
                 case "maxrange":
@@ -216,12 +223,21 @@ namespace CollisionPredictor
             }
         }
 
+        private void SetEnabled(bool enabled)
+        {
+            config.Enabled = enabled;
+            SaveConfig();
+            MyAPIGateway.Utilities.ShowMessage("Collision Warning", $"Collision warning system is now {(enabled ? "ENABLED" : "DISABLED")}");
+        }
+
         private void DisplayHelp()
         {
             StringBuilder helpText = new StringBuilder();
             helpText.AppendLine("Collision Warning Commands:");
+            helpText.AppendLine("/collwarn on - Enable collision warning system");
+            helpText.AppendLine("/collwarn off - Disable collision warning system");
             helpText.AppendLine("/collwarn debug - Toggle debug mode");
-            helpText.AppendLine("/collwarn minspeed [value] - Set minimum speed");
+            helpText.AppendLine("/collwarn minthreatspeed [value] - Set minimum speed to consider as threat");
             helpText.AppendLine("/collwarn maxrange [value] - Set maximum grid range");
             helpText.AppendLine("/collwarn voxelrange [value] - Set voxel ray range");
             helpText.AppendLine("/collwarn notifyinterval [value] - Set notification interval");
@@ -242,11 +258,11 @@ namespace CollisionPredictor
             MyAPIGateway.Utilities.ShowMessage("Collision Warning", $"Debug mode: {(config.Debug ? "ON" : "OFF")}");
         }
 
-        private void SetMinSpeed(float speed)
+        private void SetMinThreatSpeed(float speed)
         {
-            config.MinSpeed = speed;
+            config.MinThreatSpeed = speed;
             SaveConfig();
-            MyAPIGateway.Utilities.ShowMessage("Collision Warning", $"Minimum speed set to: {speed}");
+            MyAPIGateway.Utilities.ShowMessage("Collision Warning", $"Minimum threat speed set to: {speed}");
         }
 
         private void SetMaxGridRange(float range)
@@ -315,7 +331,7 @@ namespace CollisionPredictor
 
         public override void UpdateBeforeSimulation()
         {
-            if (MyAPIGateway.Utilities.IsDedicated && MyAPIGateway.Session.IsServer)
+            if (!config.Enabled || (MyAPIGateway.Utilities.IsDedicated && MyAPIGateway.Session.IsServer))
                 return;
 
             updateCounter++;
@@ -683,22 +699,25 @@ namespace CollisionPredictor
                 }
             }
         }
-        private double CalculateThreatLevel(double timeToCollision, Vector3D myVelocity, Vector3D? targetVelocity, double mySpeed)
+        private double CalculateThreatLevel(double timeToCollision, Vector3D myVelocity, Vector3D? targetVelocity, double distanceToTarget)
         {
-            Vector3D relativeVelocity = targetVelocity.HasValue ? myVelocity - targetVelocity.Value : myVelocity;
+            Vector3D relativeVelocity = targetVelocity.HasValue ? targetVelocity.Value - myVelocity : -myVelocity;
             double relativeSpeed = relativeVelocity.Length();
 
-            // Consider the threat even if the player's grid is stationary
-            double effectiveSpeed = Math.Max(mySpeed, relativeSpeed);
+            // If the relative speed is below the minimum threat speed, return 0
+            if (relativeSpeed < config.MinThreatSpeed)
+            {
+                return 0;
+            }
 
             double timeFactor = 1.0 / (timeToCollision + 0.5);
-            double distanceFactor = Math.Max(0, 1 - (timeToCollision * effectiveSpeed) / config.MaxGridRange);
+            double distanceFactor = Math.Max(0, 1 - distanceToTarget / config.MaxGridRange);
 
-            double threatLevel = effectiveSpeed * timeFactor * distanceFactor;
+            double threatLevel = relativeSpeed * timeFactor * distanceFactor;
 
             if (config.Debug)
             {
-                MyLog.Default.WriteLine($"CollisionPredictor: Calculated threat level {threatLevel} for time to collision {timeToCollision}, relative speed {relativeSpeed}");
+                MyLog.Default.WriteLine($"CollisionPredictor: Calculated threat level {threatLevel} for time to collision {timeToCollision}, relative speed {relativeSpeed}, distance {distanceToTarget}");
             }
 
             return threatLevel;

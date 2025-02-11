@@ -1,266 +1,143 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Text;
-using System.Threading;
+using System.Linq;
+using Sandbox.Definitions;
 using Sandbox.ModAPI;
 using VRage.Game.ModAPI;
-using VRage.ModAPI;
 using VRage.Utils;
+using VRageMath;
 
 namespace Scripts.BlockCulling
 {
-    public static class ThreadSafeLog
+    partial class BlockCulling
     {
-        private static readonly object _lock = new object();
-        private static readonly Queue<string> _messageQueue = new Queue<string>();
-        private static TextWriter _writer;
-        public static bool EnableDebugLogging = false;
-
-        private static bool _writerInitialized;  // Add this!
-
-        private static TextWriter Writer
+        private void SetTransparency(IMySlimBlock slimBlock, bool recursive = true, bool deepRecurse = true)
         {
-            get
+            try
             {
-                if (_writer == null && EnableDebugLogging)
+                IMyCubeBlock block = slimBlock.FatBlock;
+                if (!recursive && block == null) // Don't do a non-recursive scan on slimblocks
+                    return; // No logic would run so just return early
+
+                var blockSlimNeighbors = new HashSet<IMySlimBlock>();
+                bool shouldCullBlock = BlockEligibleForCulling(slimBlock, ref blockSlimNeighbors);
+
+                // Add to cache for making blocks invisible when inside grid's WorldAABB
+                if (block?.CubeGrid != null) // Only set fatblock visiblity to false
                 {
-                    lock (_lock)
-                    {
-                        if (_writer == null && EnableDebugLogging)
-                        {
-                            try
-                            {
-                                string logFileName = GenerateLogFileName();
-                                _writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(logFileName, typeof(ThreadSafeLog));
-                                _writer.WriteLine("Debug log initialized: {0}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-                                _writer.Flush();
-                            }
-                            catch (Exception e)
-                            {
-                                MyLog.Default.WriteLineAndConsole(string.Format("BlockCulling: Failed to initialize debug log: {0}", e.Message));
-                            }
-                        }
-                    }
+                    if (!_unCulledGrids.Contains(block
+                            .CubeGrid)) // Only set blocks to be invisible if grid is being culled
+                        block.Visible = !shouldCullBlock;
+
+                    if (shouldCullBlock)
+                        _culledBlocks[block.CubeGrid].Add(block);
+                    else
+                        _culledBlocks[block.CubeGrid].Remove(block);
                 }
-                return _writer;
+
+                if (recursive) // Do set nearby blocks visibility to false.
+                    foreach (var slimBlockN in blockSlimNeighbors)
+                        SetTransparency(slimBlockN, deepRecurse, false);
+            }
+            catch (Exception ex)
+            {
+                MyLog.Default.WriteLineAndConsole("Exception in BlockCulling: " + ex);
             }
         }
 
-        private static TextWriter EnsureWriter()  // Method, not Property!
+        private bool BlockEligibleForCulling(IMySlimBlock slimBlock, ref HashSet<IMySlimBlock> blockSlimNeighbors)
         {
-            if (!EnableDebugLogging) return null;
-
-            lock (_lock)  // Single, always-respected lock
+            if (blockSlimNeighbors == null)
+                blockSlimNeighbors = new HashSet<IMySlimBlock>();
+            foreach (var blockPos in GetSurfacePositions(slimBlock))
             {
-                if (_writer == null && !_writerInitialized && EnableDebugLogging)
+                IMySlimBlock neighbor = slimBlock.CubeGrid.GetCubeBlock(blockPos);
+                if (neighbor != null)
+                    blockSlimNeighbors.Add(neighbor);
+            }
+
+            IMyCubeBlock block = slimBlock?.FatBlock;
+            if (block == null) return false;
+
+            List<IMySlimBlock> slimNeighborsContributor = new List<IMySlimBlock>();
+
+            foreach (var slimNeighbor in blockSlimNeighbors)
+            {
+                // Determine if block is surrounded on all sides
+                int surroundingBlockCount = 0;
+                foreach (Vector3I surfacePosition in GetSurfacePositions(slimNeighbor))
+                    if (slimNeighbor.CubeGrid.CubeExists(surfacePosition))
+                        surroundingBlockCount++;
+
+                // If block is exposed and block doesn't fully occlude this block, skip.
+                if (surroundingBlockCount != GetBlockFaceCount(slimNeighbor) && !ConnectsWithFullMountPoint(slimBlock, slimNeighbor)) // If any neighbor block is exposed, check if this block is completely occluded.
+                    return false;
+
+                if (slimNeighbor.FatBlock == null || !(slimNeighbor.FatBlock is IMyLightingBlock || slimNeighbor.BlockDefinition.Id.SubtypeName.Contains("Window"))) // Limit to slimblocks and fatblocks with physics (and not windows)
+                    slimNeighborsContributor.Add(slimNeighbor);
+            }
+
+            return slimNeighborsContributor.Count == GetBlockFaceCount(block);
+        }
+
+        private bool ConnectsWithFullMountPoint(IMySlimBlock thisBlock, IMySlimBlock slimNeighbor)
+        {
+            Quaternion slimNeighborRotation;
+            slimNeighbor.Orientation.GetQuaternion(out slimNeighborRotation);
+
+            foreach (var mountPoint in ((MyCubeBlockDefinition)slimNeighbor.BlockDefinition).MountPoints)
+            {
+                if (!Vector3I.BoxContains(thisBlock.Min, thisBlock.Max, (Vector3I)(slimNeighborRotation * mountPoint.Normal + slimNeighbor.Position)))
+                    continue;
+
+                Vector3I mountSize = Vector3I.Abs(Vector3I.Round(mountPoint.End - mountPoint.Start));
+                if (mountSize.X + mountSize.Y + mountSize.Z == 2)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private int GetBlockFaceCount(IMySlimBlock block)
+        {
+            Vector3I blockSize = Vector3I.Abs(block.Max - block.Min) + Vector3I.One;
+            return 2 * (blockSize.X * blockSize.Y + blockSize.Y * blockSize.Z + blockSize.Z * blockSize.X);
+        }
+
+        private int GetBlockFaceCount(IMyCubeBlock block)
+        {
+            Vector3I blockSize = Vector3I.Abs(block.Max - block.Min) + Vector3I.One;
+            return 2 * (blockSize.X * blockSize.Y + blockSize.Y * blockSize.Z + blockSize.Z * blockSize.X);
+        }
+
+        private Vector3I[] _surfacePositions = new Vector3I[6];
+        private Vector3I[] GetSurfacePositions(IMySlimBlock block)
+        {
+            Vector3I blockSize = Vector3I.Abs(block.Max - block.Min) + Vector3I.One;
+
+            int faceCount = 2 * (blockSize.X * blockSize.Y + blockSize.Y * blockSize.Z + blockSize.Z * blockSize.X);
+            if (_surfacePositions.Length != faceCount)
+                _surfacePositions = new Vector3I[faceCount];
+
+            int idx = 0;
+
+            for (int x = -1; x <= blockSize.X; x++)
+            {
+                for (int y = -1; y <= blockSize.Y; y++)
                 {
-                    try
+                    for (int z = -1; z <= blockSize.Z; z++)
                     {
-                        _writerInitialized = true;  // Important! Set this first.
-                        string logFileName = GenerateLogFileName();
-                        _writer = MyAPIGateway.Utilities.WriteFileInLocalStorage(logFileName, typeof(ThreadSafeLog));
-                        _writer.WriteLine("Debug log initialized: {0}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-                        _writer.Flush();
-                    }
-                    catch (Exception e)
-                    {
-                        _writerInitialized = false;  // Reset if initialization failed
-                        MyLog.Default.WriteLineAndConsole(string.Format("BlockCulling: Failed to initialize debug log: {0}", e.Message));
-                    }
-                }
-                return _writer;  // Always return from within lock
-            }
-        }
-
-        private static string GenerateLogFileName()
-        {
-            string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            return string.Format("BlockCulling_Debug_{0}.log", timestamp);
-        }
-
-        public static void EnqueueMessage(string message)
-        {
-            if (!EnableDebugLogging || string.IsNullOrEmpty(message)) return;
-
-            lock (_lock)
-            {
-                // Only create formatted string if logging is enabled
-                _messageQueue.Enqueue(EnableDebugLogging ? string.Format("[{0:HH:mm:ss.fff}] {1}", DateTime.Now, message) : null);
-            }
-        }
-
-        public static void EnqueueMessageDebug(string message)
-        {
-            if (EnableDebugLogging)
-            {
-                EnqueueMessage(string.Format("[DEBUG] {0}", message));
-            }
-        }
-
-        public static void ProcessLogQueue()
-        {
-            if (!EnableDebugLogging) return;
-
-            lock (_lock)  // Single lock-context for whole method
-            {
-                TextWriter writer = EnsureWriter();  // Get writer under same lock as queue processing
-                if (writer == null) return;
-
-                while (_messageQueue.Count > 0)
-                {
-                    string msg = _messageQueue.Dequeue();
-                    try
-                    {
-                        writer.WriteLine(msg);
-                        writer.Flush();
-                    }
-                    catch (Exception e)
-                    {
-                        MyLog.Default.WriteLineAndConsole(string.Format("BlockCulling: Failed writing to debug log: {0}", e.Message));
-                    }
-                }
-            }
-        }
-
-        public static void Close()
-        {
-            lock (_lock)
-            {
-                if (_writer != null)
-                {
-                    _writer.Flush();
-                    _writer.Close();
-                    _writer = null;
-                }
-            }
-        }
-    }
-    public static class MainThreadDispatcher
-    {
-        private static readonly object _lock = new object();
-        private static readonly Queue<Action> _actionQueue = new Queue<Action>();
-
-        public static void Enqueue(Action action)
-        {
-            lock (_lock)
-            {
-                _actionQueue.Enqueue(action);
-            }
-        }
-
-        public static void Update()
-        {
-            lock (_lock)
-            {
-                while (_actionQueue.Count > 0)
-                {
-                    try
-                    {
-                        _actionQueue.Dequeue()?.Invoke();
-                    }
-                    catch (Exception ex)
-                    {
-                        ThreadSafeLog.EnqueueMessage($"Error in dispatched task: {ex.Message}");
+                        // One x, y, z should be at the outside edge of the block. Otherwise don't add to array.
+                        bool xLimit = (x == -1 || x == blockSize.X);
+                        bool yLimit = (y == -1 || y == blockSize.Y);
+                        bool zLimit = (z == -1 || z == blockSize.Z);
+                        if ((!xLimit && yLimit ^ zLimit) || (xLimit && !(yLimit || zLimit))) // Avoid checking positions inside the block.
+                            _surfacePositions[idx++] = block.Min + new Vector3I(x, y, z);
                     }
                 }
             }
-        }
-    }
 
-    public class TaskScheduler
-    {
-        private const int MAX_TASKS_PER_FRAME = 10; //at 10 it takes 5.5 minutes on a 33k reactor grid. we can speed that up // I sped it up -Muzz
-        private readonly object _lock = new object();
-        private readonly Queue<Action> _taskQueue = new Queue<Action>();
-
-        public void EnqueueTask(Action task)
-        {
-            lock (_lock)
-            {
-                _taskQueue.Enqueue(task);
-            }
-        }
-
-        public void ProcessTasks()
-        {
-            int processedCount = 0;
-            lock (_lock)
-            {
-                while (_taskQueue.Count > 0 && processedCount < MAX_TASKS_PER_FRAME)
-                {
-                    MainThreadDispatcher.Enqueue(_taskQueue.Dequeue());
-                    processedCount++;
-                }
-            }
-        }
-    }
-
-    public class SafeEntityRef<TEntity> where TEntity : class, VRage.ModAPI.IMyEntity
-    {
-        private long _entityId;
-
-        public SafeEntityRef(TEntity entity)
-        {
-            SetEntity(entity);
-        }
-
-        public void SetEntity(TEntity entity) => Interlocked.Exchange(ref _entityId, entity?.EntityId ?? 0);
-
-        public bool TryGetEntity(out TEntity entity)
-        {
-            entity = MyAPIGateway.Entities.GetEntityById(Interlocked.Read(ref _entityId)) as TEntity;
-            return entity != null;
-        }
-    }
-
-    public class PerformanceMonitor
-    {
-        private const int REPORT_INTERVAL = 600;
-        private int _tickCount;
-        private long _syncTimeTotal;
-        private long _asyncTimeTotal;
-        private int _tasksProcessedTotal;
-        private long _blocksCulledTotal;   
-        private long _blocksUnculledTotal; 
-
-        public void RecordSyncOperation(long milliseconds) => Interlocked.Add(ref _syncTimeTotal, milliseconds);
-        public void RecordAsyncOperation(long milliseconds) => Interlocked.Add(ref _asyncTimeTotal, milliseconds);
-        public void RecordTasksProcessed(int count) => Interlocked.Add(ref _tasksProcessedTotal, count);
-
-        public void Update()
-        {
-            if (Interlocked.Increment(ref _tickCount) >= REPORT_INTERVAL)
-            {
-                GenerateReport();
-                ResetCounters();
-            }
-        }
-
-        public void RecordBlocksCulled(int count) => Interlocked.Add(ref _blocksCulledTotal, count);
-        public void RecordBlocksUnculled(int count) => Interlocked.Add(ref _blocksUnculledTotal, count);
-
-        private void GenerateReport()
-        {
-            StringBuilder report = new StringBuilder();
-            report.AppendLine($"Performance Report (Last {REPORT_INTERVAL} ticks):")
-                  .AppendLine($"Avg Sync Time: {(double)_syncTimeTotal / REPORT_INTERVAL:F2}ms")
-                  .AppendLine($"Avg Async Time: {(double)_asyncTimeTotal / REPORT_INTERVAL:F2}ms")
-                  .AppendLine($"Tasks/Second: {(double)_tasksProcessedTotal / (REPORT_INTERVAL / 60.0):F2}")
-                  .AppendLine($"Blocks Culled: {_blocksCulledTotal:F2}")
-                  .AppendLine($"Blocks Unculled: {_blocksUnculledTotal:F2}");
-
-            ThreadSafeLog.EnqueueMessage(report.ToString());
-        }
-
-        private void ResetCounters()
-        {
-            Interlocked.Exchange(ref _tickCount, 0);
-            Interlocked.Exchange(ref _syncTimeTotal, 0);
-            Interlocked.Exchange(ref _asyncTimeTotal, 0);
-            Interlocked.Exchange(ref _tasksProcessedTotal, 0);
-            Interlocked.Exchange(ref _blocksCulledTotal, 0);
-            Interlocked.Exchange(ref _blocksUnculledTotal, 0);
+            return _surfacePositions;
         }
     }
 }

@@ -49,19 +49,19 @@ namespace CGP.ShareTrack.API
             if (dict == null)
                 return;
 
-            AssignMethod(dict, "GetCruiseSpeed", ref _GetCruiseSpeed);
-            AssignMethod(dict, "GetMaxSpeed", ref _GetMaxSpeed);
-            AssignMethod(dict, "GetBoost", ref _GetBoost);
-            AssignMethod(dict, "GetAcceleration", ref _GetAcceleration);
-            AssignMethod(dict, "GetAccelerationByDirection", ref _GetAccelerationByDirection);
-            AssignMethod(dict, "GetNegativeInfluence", ref _GetNegativeInfluence);
-            AssignMethod(dict, "GetReducedAngularSpeed", ref _GetReducedAngularSpeed);
+            TryAssignMethod(dict, "GetCruiseSpeed", ref _GetCruiseSpeed);
+            TryAssignMethod(dict, "GetMaxSpeed", ref _GetMaxSpeed);
+            TryAssignMethod(dict, "GetBoost", ref _GetBoost);
+            TryAssignMethod(dict, "GetAcceleration", ref _GetAcceleration);
+            TryAssignMethod(dict, "GetAccelerationByDirection", ref _GetAccelerationByDirection);
+            TryAssignMethod(dict, "GetNegativeInfluence", ref _GetNegativeInfluence);
+            TryAssignMethod(dict, "GetReducedAngularSpeed", ref _GetReducedAngularSpeed);
 
             IsReady = true;
             ReadyCallback?.Invoke();
         }
 
-        private void AssignMethod<T>(IReadOnlyDictionary<string, Delegate> delegates, string name, ref T field)
+        private void TryAssignMethod<T>(IReadOnlyDictionary<string, Delegate> delegates, string name, ref T field)
             where T : class
         {
             if (delegates == null)
@@ -72,13 +72,12 @@ namespace CGP.ShareTrack.API
 
             Delegate del;
             if (!delegates.TryGetValue(name, out del))
-                throw new Exception($"{GetType().Name} :: Couldn't find {name} delegate of type {typeof(T)}");
+            {
+                field = null;
+                return;
+            }
 
             field = del as T;
-
-            if (field == null)
-                throw new Exception(
-                    $"{GetType().Name} :: Delegate {name} is not type {typeof(T)}, instead it's: {del.GetType()}");
         }
 
         /// <summary>
@@ -86,7 +85,7 @@ namespace CGP.ShareTrack.API
         /// </summary>
         public float GetCruiseSpeed(IMyCubeGrid grid)
         {
-            return _GetCruiseSpeed.Invoke(grid);
+            return _GetCruiseSpeed != null ? _GetCruiseSpeed.Invoke(grid) : 0f;
         }
 
         /// <summary>
@@ -94,7 +93,7 @@ namespace CGP.ShareTrack.API
         /// </summary>
         public float GetMaxSpeed(IMyCubeGrid grid)
         {
-            return _GetMaxSpeed.Invoke(grid);
+            return _GetMaxSpeed != null ? _GetMaxSpeed.Invoke(grid) : 0f;
         }
 
         /// <summary>
@@ -102,7 +101,7 @@ namespace CGP.ShareTrack.API
         /// </summary>
         public float[] GetBoost(IMyCubeGrid grid)
         {
-            return _GetBoost.Invoke(grid);
+            return _GetBoost != null ? _GetBoost.Invoke(grid) : new float[0];
         }
 
         /// <summary>
@@ -110,7 +109,7 @@ namespace CGP.ShareTrack.API
         /// </summary>
         public float[] GetAcceleration(IMyCubeGrid grid)
         {
-            return _GetAcceleration.Invoke(grid);
+            return _GetAcceleration != null ? _GetAcceleration.Invoke(grid) : new float[0];
         }
 
         /// <summary>
@@ -122,7 +121,7 @@ namespace CGP.ShareTrack.API
         /// </summary>
         public float[] GetAccelerationByDirection(IMyCubeGrid grid)
         {
-            return _GetAccelerationByDirection.Invoke(grid);
+            return _GetAccelerationByDirection != null ? _GetAccelerationByDirection.Invoke(grid) : new float[0];
         }
 
         /// <summary>
@@ -130,7 +129,7 @@ namespace CGP.ShareTrack.API
         /// </summary>
         public float GetNegativeInfluence(IMyCubeGrid grid)
         {
-            return _GetNegativeInfluence.Invoke(grid);
+            return _GetNegativeInfluence != null ? _GetNegativeInfluence.Invoke(grid) : 0f;
         }
 
         /// <summary>
@@ -138,7 +137,7 @@ namespace CGP.ShareTrack.API
         /// </summary>
         public float GetReducedAngularSpeed(IMyCubeGrid grid)
         {
-            return _GetReducedAngularSpeed.Invoke(grid);
+            return _GetReducedAngularSpeed != null ? _GetReducedAngularSpeed.Invoke(grid) : 0f;
         }
     }
 }
